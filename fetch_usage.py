@@ -16,6 +16,7 @@ Tokenof — DeepSeek 用量資料擷取腳本
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,9 +59,9 @@ def load_token() -> str:
                 if val:
                     return val
 
-    print("❌ 找不到 DEEPSEEK_PLATFORM_TOKEN", file=sys.stderr)
-    print("   請設定環境變數或在 tokenof/.env 中加入：", file=sys.stderr)
-    print('   DEEPSEEK_PLATFORM_TOKEN=你的_token', file=sys.stderr)
+    print("[ERROR] DEEPSEEK_PLATFORM_TOKEN not set", file=sys.stderr)
+    print("    Set env var or add to tokenof/.env:", file=sys.stderr)
+    print("    DEEPSEEK_PLATFORM_TOKEN=your_token", file=sys.stderr)
     sys.exit(1)
 
 
@@ -76,10 +77,10 @@ def api_get(url: str, token: str) -> dict:
             return json.loads(resp.read().decode("utf-8"))
     except HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
-        print(f"❌ API 錯誤 {e.code}: {body[:300]}", file=sys.stderr)
+        print(f"[ERROR] API error {e.code}: {body[:300]}", file=sys.stderr)
         sys.exit(1)
     except URLError as e:
-        print(f"❌ 網路錯誤: {e.reason}", file=sys.stderr)
+        print(f"[ERROR] Network error: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -275,28 +276,28 @@ def generate_mock_data(days: int = 90) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Tokenof — DeepSeek 用量資料擷取")
-    parser.add_argument("--days", type=int, default=90, help="回溯天數（預設 90）")
-    parser.add_argument("--mock", action="store_true", help="產生假資料供測試")
-    parser.add_argument("--output", type=str, default=None, help="輸出檔案路徑")
+    parser = argparse.ArgumentParser(description="Tokenof - DeepSeek usage fetcher")
+    parser.add_argument("--days", type=int, default=90, help="Days to fetch (default 90)")
+    parser.add_argument("--mock", action="store_true", help="Generate mock data for testing")
+    parser.add_argument("--output", type=str, default=None, help="Output file path")
     args = parser.parse_args()
 
     script_dir = Path(__file__).parent
     output_path = Path(args.output) if args.output else script_dir / "usage_data.json"
 
     if args.mock:
-        print("🎭 產生假資料...")
+        print("[MOCK] Generating mock data...")
         data = generate_mock_data(args.days)
     else:
         token = load_token()
-        print(f"📡 擷取用量資料（最近 {args.days} 天）...")
+        print(f"[FETCH] Pulling usage data (last {args.days} days)...")
 
         # Fetch all three endpoints
-        print("  → /api/v0/usage/amount ...")
+        print("  -> /api/v0/usage/amount ...")
         amount_raw = api_get(ENDPOINTS["amount"], token)
-        print("  → /api/v0/usage/cost ...")
+        print("  -> /api/v0/usage/cost ...")
         cost_raw = api_get(ENDPOINTS["cost"], token)
-        print("  → /api/v0/users/get_user_summary ...")
+        print("  -> /api/v0/users/get_user_summary ...")
         summary_raw = api_get(ENDPOINTS["summary"], token)
 
         # Normalize
@@ -318,18 +319,29 @@ def main():
     output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     day_count = len(data["daily"])
     total_cost = sum(d["total_cost_cny"] for d in data["daily"])
-    print(f"✅ 已寫入 {day_count} 天資料 → {output_path}")
-    print(f"   {args.days} 天總花費: ¥{total_cost:.2f}")
+    print(f"[OK] Wrote {day_count} days -> {output_path}")
+    print(f"     {args.days}-day total cost: {total_cost:.2f} CNY")
 
-    # Inject data into HTML dashboard (so it works from file:// without fetch CORS issues)
-    html_template = script_dir / "tokenof-dashboard.html"
-    if html_template.exists():
-        html_content = html_template.read_text(encoding="utf-8")
-        json_data = json.dumps(data, ensure_ascii=False)
-        data_script = f'<script id="tokenof-data" type="application/json">{json_data}</script>'
-        html_content = html_content.replace("// TOKENOF_DATA_PLACEHOLDER", data_script)
-        html_template.write_text(html_content, encoding="utf-8")
-        print(f"✅ 已將資料嵌入 → {html_template}")
+    # Inject data into HTML dashboard (idempotent: regex replaces existing container)
+    html_path = script_dir / "tokenof-dashboard.html"
+    if html_path.exists():
+        html = html_path.read_text(encoding="utf-8")
+        payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+        block = f'<script id="tokenof-data" type="application/json">{payload}</script>'
+        new_html, n = re.subn(
+            r'<script id="tokenof-data"[^>]*>.*?</script>',
+            lambda _: block,
+            html,
+            count=1,
+            flags=re.S,
+        )
+        if n == 0:
+            print("[ERROR] Could not find tokenof-data container in HTML — template may be corrupted", file=sys.stderr)
+            sys.exit(1)
+        html_path.write_text(new_html, encoding="utf-8")
+        print(f"[OK] Injected data into {html_path}")
+    else:
+        print("[WARN] tokenof-dashboard.html not found, skipping HTML injection", file=sys.stderr)
 
 
 if __name__ == "__main__":
