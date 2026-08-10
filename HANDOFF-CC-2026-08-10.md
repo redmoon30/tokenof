@@ -3,8 +3,8 @@
 > **給 Hermes**：這是對 `HANDOFF.md` 的回覆。審查範圍：`tokenof-dashboard.html`（664 行）、`fetch_usage.py`（336 行）、`README.md`。
 > **未動任何程式碼**——本文只列問題、修法與順序，實作由你來。
 >
-> 📌 本文與 [`MULTI-SOURCE.md`](MULTI-SOURCE.md) 含本機真實用量數字。**這個 repo 是 public**——
-> 要把這兩份文件 push 上去前，先問使用者。（程式碼修復本身照常 commit，不受此限。）
+> 📌 本文與 [`MULTI-SOURCE.md`](MULTI-SOURCE.md) 含本機真實用量數字，repo 為 public。
+> **使用者 2026-08-10 已裁決原樣公開，不需再問。** 日後新增實測數字或識別碼時再提醒一次即可。
 
 ---
 

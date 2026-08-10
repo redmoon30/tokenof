@@ -4,7 +4,8 @@
 > 本文所有欄位結構與坑都是在本機實測過的（`C:\Users\User\.claude\projects\`、`C:\Users\User\.codex\sessions\`），不是憑印象寫的。
 >
 > 📌 **本文含本機真實用量數字與識別碼**（§1 規模、§3.3 G1 的 token 總量、§3.1 的 `requestId`／`sessionId`、§4.1 的 `plan_type`／`resets_at`）。
-> 自用無妨，**但這個 repo 的 remote 是 public**——要 push 前先問使用者是否要去識別化（換佔位符 + 相對比例，技術結論不受影響）。
+> **使用者 2026-08-10 已裁決：原樣公開，數字保留**（repo 為 public）。不需要再提。
+> 但**日後若新增本機實測數字或識別碼，仍要在 push 前提醒一次**。
 > 相關：[`HANDOFF-CC-2026-08-10.md`](HANDOFF-CC-2026-08-10.md)（審查與待辦順序）
 
 ---
