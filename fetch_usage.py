@@ -314,12 +314,22 @@ def main():
             "daily": daily,
         }
 
-    # Write output
+    # Write JSON output
     output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     day_count = len(data["daily"])
     total_cost = sum(d["total_cost_cny"] for d in data["daily"])
     print(f"✅ 已寫入 {day_count} 天資料 → {output_path}")
     print(f"   {args.days} 天總花費: ¥{total_cost:.2f}")
+
+    # Inject data into HTML dashboard (so it works from file:// without fetch CORS issues)
+    html_template = script_dir / "tokenof-dashboard.html"
+    if html_template.exists():
+        html_content = html_template.read_text(encoding="utf-8")
+        json_data = json.dumps(data, ensure_ascii=False)
+        data_script = f'<script id="tokenof-data" type="application/json">{json_data}</script>'
+        html_content = html_content.replace("// TOKENOF_DATA_PLACEHOLDER", data_script)
+        html_template.write_text(html_content, encoding="utf-8")
+        print(f"✅ 已將資料嵌入 → {html_template}")
 
 
 if __name__ == "__main__":
