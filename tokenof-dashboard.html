@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tokenof — DeepSeek 用量儀表板</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: { extend: {} }
+}
+</script>
+<style>
+  :root {
+    --bg: #f8fafc;
+    --bg-card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --text-sub: #94a3b8;
+    --accent: #3b82f6;
+    --accent2: #8b5cf6;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --grid: rgba(0,0,0,0.04);
+  }
+  .dark {
+    --bg: #0f172a;
+    --bg-card: #1e293b;
+    --border: #334155;
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+    --text-sub: #64748b;
+    --grid: rgba(255,255,255,0.04);
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .stat-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
+  .stat-label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .btn { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-muted); cursor: pointer; font-size: 0.8rem; transition: all 0.15s; }
+  .btn:hover { color: var(--text); border-color: var(--text-muted); }
+  .btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .view-btn { padding: 5px 12px; border-radius: 6px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.78rem; font-weight: 500; transition: all 0.15s; }
+  .view-btn:hover { color: var(--text); }
+  .view-btn.active { background: var(--accent); color: #fff; }
+  .insight-good { border-left: 3px solid var(--success); }
+  .insight-warn { border-left: 3px solid var(--warning); }
+  .insight-bad { border-left: 3px solid var(--danger); }
+  .trend-up { color: var(--danger); }
+  .trend-down { color: var(--success); }
+  .trend-flat { color: var(--text-muted); }
+  canvas { max-height: 320px; }
+  .chart-container { position: relative; width: 100%; }
+</style>
+</head>
+<body class="min-h-screen p-4 md:p-6">
+
+<!-- Header -->
+<div class="max-w-7xl mx-auto">
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">🔭 Tokenof</h1>
+      <p class="text-sm text-[var(--text-muted)] mt-0.5">DeepSeek Token 用量儀表板</p>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap">
+      <span id="fetchedAt" class="text-xs text-[var(--text-sub)]"></span>
+      <div class="flex rounded-lg border border-[var(--border)] overflow-hidden">
+        <button class="view-btn active" data-view="year"  onclick="switchView('year')">年</button>
+        <button class="view-btn"        data-view="month" onclick="switchView('month')">月</button>
+        <button class="view-btn"        data-view="day"   onclick="switchView('day')">日</button>
+      </div>
+      <button class="btn" onclick="toggleTheme()" title="切換主題">🌓</button>
+    </div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="summaryCards"></div>
+
+  <!-- Month-over-Month Comparison -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="momCards"></div>
+
+  <!-- Charts Row 1 -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <div class="card">
+      <h3 class="text-sm font-semibold mb-3 text-[var(--text-muted)] uppercase tracking-wide" id="chart1Title">每月用量趨勢</h3>
+      <div class="chart-container"><canvas id="chartMonthly"></canvas></div>
+    </div>
+    <div class="card">
+      <h3 class="text-sm font-semibold mb-3 text-[var(--text-muted)] uppercase tracking-wide" id="chart2Title">每日用量明細</h3>
+      <div class="chart-container"><canvas id="chartDaily"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Charts Row 2 -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <div class="card">
+      <h3 class="text-sm font-semibold mb-3 text-[var(--text-muted)] uppercase tracking-wide">模型用量分布</h3>
+      <div class="flex flex-col md:flex-row gap-4">
+        <div class="flex-1 chart-container" style="max-height:250px"><canvas id="chartModelTokens"></canvas></div>
+        <div class="flex-1 chart-container" style="max-height:250px"><canvas id="chartModelCost"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="text-sm font-semibold mb-3 text-[var(--text-muted)] uppercase tracking-wide">Cache 命中率趨勢</h3>
+      <div class="chart-container"><canvas id="chartCacheRate"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Insights -->
+  <div class="card mb-6">
+    <h3 class="text-sm font-semibold mb-3 text-[var(--text-muted)] uppercase tracking-wide">💡 Token 優化洞察</h3>
+    <div id="insightsContainer" class="space-y-2"></div>
+  </div>
+
+  <!-- Model Detail Table -->
+  <div class="card">
+    <h3 class="text-sm font-semibold mb-3 text-[var(--text-muted)] uppercase tracking-wide">模型用量明細</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm" id="modelTable">
+        <thead>
+          <tr class="text-left text-xs text-[var(--text-sub)] uppercase tracking-wide">
+            <th class="pb-2">模型</th>
+            <th class="pb-2 text-right">Cache Hit</th>
+            <th class="pb-2 text-right">Cache Miss</th>
+            <th class="pb-2 text-right">Response</th>
+            <th class="pb-2 text-right">總 Token</th>
+            <th class="pb-2 text-right">請求數</th>
+            <th class="pb-2 text-right">花費</th>
+            <th class="pb-2 text-right">命中率</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let rawData = null;
+let currentView = 'year'; // year | month | day
+let charts = {};
+
+// ============================================================
+// FORMAT
+// ============================================================
+function fmtUnit(n) {
+  if (n == null || isNaN(n) || n === 0) return '0';
+  const abs = Math.abs(n);
+  if (abs < 10000) return n.toLocaleString();
+  if (abs < 100000) return (n / 10000).toFixed(2) + ' 萬';
+  if (abs < 1e6) return (n / 1e5).toFixed(2) + ' 十萬';
+  if (abs < 1e7) return (n / 1e6).toFixed(2) + ' 百萬';
+  if (abs < 1e8) return (n / 1e7).toFixed(2) + ' 千萬';
+  return (n / 1e8).toFixed(2) + ' 億';
+}
+function fmtCny(n) { return '¥' + (n || 0).toFixed(2); }
+function fmtPct(n) { return (n * 100).toFixed(1) + '%'; }
+function fmtInt(n) { return (n || 0).toLocaleString(); }
+
+// ============================================================
+// THEME
+// ============================================================
+function toggleTheme() {
+  document.documentElement.classList.toggle('dark');
+  updateChartThemes();
+}
+function updateChartThemes() {
+  const isDark = document.documentElement.classList.contains('dark');
+  const gridColor = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
+  const tickColor = isDark ? '#94a3b8' : '#64748b';
+  Object.values(charts).forEach(c => {
+    if (c.options.scales?.x?.ticks) c.options.scales.x.ticks.color = tickColor;
+    if (c.options.scales?.y?.ticks) {
+      c.options.scales.y.ticks.color = tickColor;
+      c.options.scales.y.grid.color = gridColor;
+    }
+    if (c.options.plugins?.legend?.labels) c.options.plugins.legend.labels.color = tickColor;
+    c.update();
+  });
+}
+
+// ============================================================
+// DATA HELPERS
+// ============================================================
+function getDaysInView() {
+  const daily = rawData.daily;
+  if (!daily.length) return [];
+  const now = new Date();
+  if (currentView === 'year') {
+    const cutoff = new Date(now); cutoff.setFullYear(cutoff.getFullYear() - 1);
+    return daily.filter(d => new Date(d.date) >= cutoff);
+  } else if (currentView === 'month') {
+    const cutoff = new Date(now); cutoff.setMonth(cutoff.getMonth() - 1);
+    return daily.filter(d => new Date(d.date) >= cutoff);
+  } else {
+    return daily.slice(-31);
+  }
+}
+
+function getGroupedByMonth(days) {
+  const map = {};
+  days.forEach(d => {
+    const m = d.date.substring(0, 7);
+    if (!map[m]) map[m] = { tokens: 0, cost: 0, hit: 0, miss: 0, resp: 0, reqs: 0 };
+    map[m].tokens += d.total_tokens;
+    map[m].cost += d.total_cost_cny;
+    map[m].hit += d.prompt_cache_hit;
+    map[m].miss += d.prompt_cache_miss;
+    map[m].resp += d.response;
+    map[m].reqs += d.request_count;
+  });
+  return Object.entries(map).map(([m, v]) => ({ month: m, ...v }));
+}
+
+function getGroupedByDay(days) {
+  return days.map(d => ({
+    date: d.date,
+    label: d.date.substring(5),
+    hit: d.prompt_cache_hit,
+    miss: d.prompt_cache_miss,
+    resp: d.response,
+    tokens: d.total_tokens,
+    cost: d.total_cost_cny,
+    cacheRate: d.cache_hit_rate,
+    reqs: d.request_count,
+  }));
+}
+
+function getModelAgg(days) {
+  const map = {};
+  days.forEach(d => {
+    Object.entries(d.models).forEach(([name, m]) => {
+      if (!map[name]) map[name] = { hit: 0, miss: 0, resp: 0, tokens: 0, cost: 0, reqs: 0 };
+      map[name].hit += m.prompt_cache_hit;
+      map[name].miss += m.prompt_cache_miss;
+      map[name].resp += m.response;
+      map[name].tokens += m.prompt_cache_hit + m.prompt_cache_miss + m.response;
+      map[name].cost += m.cost_cny;
+      map[name].reqs += m.request_count;
+    });
+  });
+  return Object.entries(map).map(([name, v]) => ({ name, ...v }));
+}
+
+function getSummary(days) {
+  const totalTokens = days.reduce((s, d) => s + d.total_tokens, 0);
+  const totalCost = days.reduce((s, d) => s + d.total_cost_cny, 0);
+  const totalHit = days.reduce((s, d) => s + d.prompt_cache_hit, 0);
+  const totalMiss = days.reduce((s, d) => s + d.prompt_cache_miss, 0);
+  const totalReqs = days.reduce((s, d) => s + d.request_count, 0);
+  return {
+    totalTokens, totalCost,
+    cacheRate: (totalHit + totalMiss) > 0 ? totalHit / (totalHit + totalMiss) : 0,
+    totalReqs,
+    avgTokensPerReq: totalReqs > 0 ? Math.round(totalTokens / totalReqs) : 0,
+    totalHit, totalMiss,
+  };
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderAll() {
+  if (!rawData || !rawData.daily.length) {
+    document.body.innerHTML = '<div class="flex items-center justify-center min-h-screen text-[var(--text-muted)]">尚無資料 — 請先執行 fetch_usage.py</div>';
+    return;
+  }
+  document.getElementById('fetchedAt').textContent = '更新: ' + (rawData.fetched_at || '');
+  if (rawData.is_mock) {
+    document.getElementById('fetchedAt').textContent += ' (🎭 假資料)';
+  }
+
+  const viewDays = getDaysInView();
+  const monthly = getGroupedByMonth(viewDays);
+  const daily = getGroupedByDay(viewDays);
+  const summary = getSummary(viewDays);
+  const modelAgg = getModelAgg(viewDays);
+
+  renderSummaryCards(summary, daily);
+  renderMoMCards(monthly);
+  renderMonthlyChart(monthly);
+  renderDailyChart(daily);
+  renderModelCharts(modelAgg);
+  renderCacheRateChart(daily);
+  renderInsights(summary, daily, modelAgg);
+  renderModelTable(modelAgg);
+  updateChartThemes();
+}
+
+// ---- Summary Cards ----
+function renderSummaryCards(summary, daily) {
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="card"><div class="stat-label">總 Token</div><div class="stat-value">${fmtUnit(summary.totalTokens)}</div></div>
+    <div class="card"><div class="stat-label">總花費</div><div class="stat-value" style="color:var(--danger)">${fmtCny(summary.totalCost)}</div></div>
+    <div class="card"><div class="stat-label">Cache 命中率</div><div class="stat-value" style="color:${summary.cacheRate >= 0.9 ? 'var(--success)' : summary.cacheRate >= 0.8 ? 'var(--warning)' : 'var(--danger)'}">${fmtPct(summary.cacheRate)}</div></div>
+    <div class="card"><div class="stat-label">API 請求數</div><div class="stat-value">${fmtInt(summary.totalReqs)}</div><div class="text-xs text-[var(--text-sub)] mt-0.5">平均 ${fmtInt(summary.avgTokensPerReq)} tokens/req</div></div>
+  `;
+}
+
+// ---- Month-over-Month ----
+function renderMoMCards(monthly) {
+  if (monthly.length < 2) {
+    document.getElementById('momCards').innerHTML = '';
+    return;
+  }
+  const thisMonth = monthly[monthly.length - 1];
+  const lastMonth = monthly[monthly.length - 2];
+  const tokenChange = lastMonth.tokens > 0 ? ((thisMonth.tokens - lastMonth.tokens) / lastMonth.tokens * 100) : 0;
+  const costChange = lastMonth.cost > 0 ? ((thisMonth.cost - lastMonth.cost) / lastMonth.cost * 100) : 0;
+  const hitChange = (lastMonth.hit + lastMonth.miss) > 0
+    ? ((thisMonth.hit / (thisMonth.hit + thisMonth.miss)) - (lastMonth.hit / (lastMonth.hit + lastMonth.miss))) * 100 : 0;
+
+  const trendArrow = (v) => v > 1 ? '↑' : v < -1 ? '↓' : '→';
+  const trendClass = (v) => v > 1 ? 'trend-up' : v < -1 ? 'trend-down' : 'trend-flat';
+
+  document.getElementById('momCards').innerHTML = `
+    <div class="card">
+      <div class="stat-label">本月 vs 上月 Token</div>
+      <div class="text-xs text-[var(--text-sub)]">${monthly[monthly.length-2]?.month || '—'} → ${thisMonth.month}</div>
+      <div class="stat-value" style="font-size:1.1rem">${fmtUnit(thisMonth.tokens)} <span class="${trendClass(tokenChange)}" style="font-size:0.85rem">${trendArrow(tokenChange)} ${Math.abs(tokenChange).toFixed(1)}%</span></div>
+    </div>
+    <div class="card">
+      <div class="stat-label">本月 vs 上月花費</div>
+      <div class="text-xs text-[var(--text-sub)]">${monthly[monthly.length-2]?.month || '—'} → ${thisMonth.month}</div>
+      <div class="stat-value" style="font-size:1.1rem">${fmtCny(thisMonth.cost)} <span class="${trendClass(costChange)}" style="font-size:0.85rem">${trendArrow(costChange)} ${Math.abs(costChange).toFixed(1)}%</span></div>
+    </div>
+    <div class="card">
+      <div class="stat-label">命中率變化</div>
+      <div class="text-xs text-[var(--text-sub)]">${monthly[monthly.length-2]?.month || '—'} → ${thisMonth.month}</div>
+      <div class="stat-value" style="font-size:1.1rem">${fmtPct(thisMonth.hit / (thisMonth.hit + thisMonth.miss) || 0)} <span class="${trendClass(hitChange > 0 ? 1 : -1)}" style="font-size:0.85rem">${trendArrow(hitChange > 0 ? 1 : -1)} ${Math.abs(hitChange).toFixed(1)}pp</span></div>
+    </div>
+    <div class="card">
+      <div class="stat-label">請求數變化</div>
+      <div class="text-xs text-[var(--text-sub)]">${monthly[monthly.length-2]?.month || '—'} → ${thisMonth.month}</div>
+      <div class="stat-value" style="font-size:1.1rem">${fmtInt(thisMonth.reqs)} <span class="${trendClass(lastMonth.reqs > 0 ? (thisMonth.reqs - lastMonth.reqs) / lastMonth.reqs * 100 : 0)}" style="font-size:0.85rem">${trendArrow(lastMonth.reqs > 0 ? (thisMonth.reqs - lastMonth.reqs) / lastMonth.reqs * 100 : 0)}</span></div>
+    </div>
+  `;
+}
+
+// ---- Monthly Chart ----
+function renderMonthlyChart(monthly) {
+  if (charts.chartMonthly) charts.chartMonthly.destroy();
+  const isDark = document.documentElement.classList.contains('dark');
+  const labels = monthly.map(m => m.month);
+  const tokens = monthly.map(m => m.tokens);
+  const costs = monthly.map(m => m.cost);
+  const changes = monthly.map((m, i) => i === 0 ? null : tokens[i-1] > 0 ? ((tokens[i] - tokens[i-1]) / tokens[i-1] * 100) : 0);
+
+  document.getElementById('chart1Title').textContent = currentView === 'year' ? '每月用量趨勢 (近一年)' : currentView === 'month' ? '每週用量趨勢 (近月)' : '每日用量趨勢 (近31天)';
+
+  charts.chartMonthly = new Chart(document.getElementById('chartMonthly'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Token 數',
+          data: tokens,
+          backgroundColor: isDark ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.3)',
+          borderColor: '#3b82f6',
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'y',
+        },
+        {
+          label: '月增減率 %',
+          data: changes,
+          type: 'line',
+          borderColor: '#f59e0b',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: '#f59e0b',
+          yAxisID: 'y1',
+          tension: 0.3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: isDark ? '#94a3b8' : '#64748b', boxWidth: 12, padding: 16 } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ctx.dataset.label.includes('%')
+              ? `${ctx.dataset.label}: ${ctx.raw != null ? ctx.raw.toFixed(1) + '%' : '—'}`
+              : `${ctx.dataset.label}: ${fmtUnit(ctx.raw)}`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          type: 'linear', position: 'left',
+          ticks: { color: isDark ? '#94a3b8' : '#64748b', callback: v => fmtUnit(v) },
+          grid: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' },
+        },
+        y1: {
+          type: 'linear', position: 'right',
+          ticks: { color: '#f59e0b', callback: v => v.toFixed(0) + '%' },
+          grid: { drawOnChartArea: false },
+        },
+        x: { ticks: { color: isDark ? '#94a3b8' : '#64748b', maxRotation: 45 } },
+      },
+    },
+  });
+}
+
+// ---- Daily Chart ----
+function renderDailyChart(daily) {
+  if (charts.chartDaily) charts.chartDaily.destroy();
+  const isDark = document.documentElement.classList.contains('dark');
+  const labels = daily.map(d => d.label);
+  const maxIdx = daily.reduce((iMax, d, i, arr) => d.tokens > (arr[iMax]?.tokens || 0) ? i : iMax, 0);
+
+  document.getElementById('chart2Title').textContent = currentView === 'year' ? '每月用量明細' : currentView === 'month' ? '每週用量明細' : '每日用量明細 (近31天)';
+
+  charts.chartDaily = new Chart(document.getElementById('chartDaily'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Cache Hit', data: daily.map(d => d.hit), backgroundColor: isDark ? 'rgba(34,197,94,0.5)' : 'rgba(34,197,94,0.4)', borderColor: '#22c55e', borderWidth: 0, borderRadius: 2 },
+        { label: 'Cache Miss', data: daily.map(d => d.miss), backgroundColor: isDark ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.3)', borderColor: '#ef4444', borderWidth: 0, borderRadius: 2 },
+        { label: 'Response', data: daily.map(d => d.resp), backgroundColor: isDark ? 'rgba(139,92,246,0.4)' : 'rgba(139,92,246,0.3)', borderColor: '#8b5cf6', borderWidth: 0, borderRadius: 2 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: isDark ? '#94a3b8' : '#64748b', boxWidth: 12, padding: 16 } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${fmtUnit(ctx.raw)}`,
+            afterBody: (items) => {
+              const d = daily[items[0].dataIndex];
+              return [`花費: ${fmtCny(d.cost)}`, `命中率: ${fmtPct(d.cacheRate)}`];
+            },
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: isDark ? '#94a3b8' : '#64748b', maxRotation: 45, autoSkip: true, maxTicksLimit: 20 } },
+        y: { stacked: true, ticks: { color: isDark ? '#94a3b8' : '#64748b', callback: v => fmtUnit(v) }, grid: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } },
+      },
+    },
+  });
+}
+
+// ---- Model Charts ----
+function renderModelCharts(modelAgg) {
+  const isDark = document.documentElement.classList.contains('dark');
+  const labels = modelAgg.map(m => m.name.replace('deepseek-', ''));
+  const colors = ['#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'];
+
+  if (charts.chartModelTokens) charts.chartModelTokens.destroy();
+  if (charts.chartModelCost) charts.chartModelCost.destroy();
+
+  charts.chartModelTokens = new Chart(document.getElementById('chartModelTokens'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: modelAgg.map(m => m.tokens), backgroundColor: colors.slice(0, modelAgg.length), borderWidth: 0 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: isDark ? '#94a3b8' : '#64748b', padding: 12, boxWidth: 10 } },
+        title: { display: true, text: 'Token 占比', color: isDark ? '#94a3b8' : '#64748b', font: { size: 12 } },
+      },
+    },
+  });
+
+  charts.chartModelCost = new Chart(document.getElementById('chartModelCost'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: modelAgg.map(m => m.cost), backgroundColor: colors.slice(0, modelAgg.length), borderWidth: 0 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: isDark ? '#94a3b8' : '#64748b', padding: 12, boxWidth: 10 } },
+        title: { display: true, text: '花費占比', color: isDark ? '#94a3b8' : '#64748b', font: { size: 12 } },
+      },
+    },
+  });
+}
+
+// ---- Cache Rate Chart ----
+function renderCacheRateChart(daily) {
+  if (charts.chartCacheRate) charts.chartCacheRate.destroy();
+  const isDark = document.documentElement.classList.contains('dark');
+  const labels = daily.map(d => d.label);
+
+  charts.chartCacheRate = new Chart(document.getElementById('chartCacheRate'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Cache 命中率',
+        data: daily.map(d => d.cacheRate * 100),
+        borderColor: '#22c55e',
+        backgroundColor: isDark ? 'rgba(34,197,94,0.1)' : 'rgba(34,197,94,0.15)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => `命中率: ${ctx.raw.toFixed(1)}%` } },
+      },
+      scales: {
+        y: { min: 0, max: 100, ticks: { color: isDark ? '#94a3b8' : '#64748b', callback: v => v + '%' }, grid: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } },
+        x: { ticks: { color: isDark ? '#94a3b8' : '#64748b', maxRotation: 45, autoSkip: true, maxTicksLimit: 20 } },
+      },
+    },
+  });
+}
+
+// ---- Insights ----
+function renderInsights(summary, daily, modelAgg) {
+  const insights = [];
+
+  // Cache hit rate
+  if (summary.cacheRate < 0.8) {
+    insights.push({ level: 'bad', text: `Cache 命中率僅 ${fmtPct(summary.cacheRate)}，低於 80%。建議優化 system prompt 以提高 cache 命中，可節省 Cache Miss 費用。` });
+  } else if (summary.cacheRate < 0.9) {
+    insights.push({ level: 'warn', text: `Cache 命中率 ${fmtPct(summary.cacheRate)}，接近理想值但仍有改善空間。檢查是否有頻繁變動的 system prompt。` });
+  } else {
+    insights.push({ level: 'good', text: `Cache 命中率 ${fmtPct(summary.cacheRate)}，表現優異！Cache 機制有效節省了大量費用。` });
+  }
+
+  // Response ratio
+  const totalResp = summary.totalHit + summary.totalMiss > 0 ? daily.reduce((s, d) => s + d.resp, 0) / (daily.reduce((s, d) => s + d.hit + d.miss, 0)) : 0;
+  if (totalResp > 0.5) {
+    insights.push({ level: 'warn', text: `Response/Input 比例偏高 (${(totalResp*100).toFixed(0)}%)，輸出 token 多。考慮限制 max_tokens 或優化 prompt 要求精簡回答。` });
+  }
+
+  // Cost-heavy model
+  if (modelAgg.length >= 2) {
+    const sorted = [...modelAgg].sort((a, b) => b.cost - a.cost);
+    const topModel = sorted[0];
+    const topCostShare = topModel.cost / summary.totalCost * 100;
+    const topTokenShare = topModel.tokens / summary.totalTokens * 100;
+    if (topCostShare - topTokenShare > 15) {
+      insights.push({ level: 'warn', text: `${topModel.name} 佔 Token 的 ${topTokenShare.toFixed(0)}% 但佔花費的 ${topCostShare.toFixed(0)}%。考慮將部分工作切換到更便宜的模型（如 V4 Pro → V4 Flash）。` });
+    }
+  }
+
+  // Weekend usage
+  const weekends = daily.filter(d => {
+    const day = new Date(d.date + 'T00:00:00');
+    return day.getDay() === 0 || day.getDay() === 6;
+  });
+  const weekdayAvg = daily.filter(d => {
+    const day = new Date(d.date + 'T00:00:00');
+    return day.getDay() !== 0 && day.getDay() !== 6;
+  }).reduce((s, d) => s + d.tokens, 0) / Math.max(1, daily.length - weekends.length);
+  const weekendAvg = weekends.reduce((s, d) => s + d.tokens, 0) / Math.max(1, weekends.length);
+  if (weekdayAvg > 0 && weekendAvg / weekdayAvg > 0.5) {
+    insights.push({ level: 'warn', text: `週末用量仍達平日 ${(weekendAvg/weekdayAvg*100).toFixed(0)}%，檢查是否有不必要的排程任務在週末執行。` });
+  }
+
+  // Spike detection
+  if (daily.length >= 14) {
+    const recent14 = daily.slice(-14);
+    const avg = recent14.reduce((s, d) => s + d.tokens, 0) / recent14.length;
+    const spikes = recent14.filter(d => d.tokens > avg * 2);
+    if (spikes.length > 0) {
+      insights.push({ level: 'bad', text: `偵測到 ${spikes.length} 天用量暴增（>2x 平均）：${spikes.map(d => d.date).join(', ')}。建議排查是否有異常呼叫。` });
+    }
+  }
+
+  // Avg tokens per request
+  if (summary.avgTokensPerReq > 10000) {
+    insights.push({ level: 'warn', text: `平均每次請求 ${fmtInt(summary.avgTokensPerReq)} tokens，偏高。檢查是否有過長的 conversation history 或過大的 system prompt。` });
+  }
+
+  document.getElementById('insightsContainer').innerHTML = insights.map(i => `
+    <div class="insight-${i.level} bg-[var(--bg-card)] rounded-lg p-3 flex items-start gap-2">
+      <span class="text-sm">${i.level === 'good' ? '✅' : i.level === 'warn' ? '⚠️' : '🔴'}</span>
+      <span class="text-sm text-[var(--text)]">${i.text}</span>
+    </div>
+  `).join('');
+}
+
+// ---- Model Table ----
+function renderModelTable(modelAgg) {
+  const sorted = [...modelAgg].sort((a, b) => b.cost - a.cost);
+  document.querySelector('#modelTable tbody').innerHTML = sorted.map(m => {
+    const total = m.hit + m.miss + m.resp;
+    const cacheRate = (m.hit + m.miss) > 0 ? m.hit / (m.hit + m.miss) : 0;
+    return `<tr class="border-t border-[var(--border)]">
+      <td class="py-2 font-medium">${m.name}</td>
+      <td class="py-2 text-right">${fmtUnit(m.hit)}</td>
+      <td class="py-2 text-right">${fmtUnit(m.miss)}</td>
+      <td class="py-2 text-right">${fmtUnit(m.resp)}</td>
+      <td class="py-2 text-right font-semibold">${fmtUnit(total)}</td>
+      <td class="py-2 text-right">${fmtInt(m.reqs)}</td>
+      <td class="py-2 text-right" style="color:var(--danger)">${fmtCny(m.cost)}</td>
+      <td class="py-2 text-right">${fmtPct(cacheRate)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ---- View Switching ----
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  renderAll();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  try {
+    const resp = await fetch('usage_data.json');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    rawData = await resp.json();
+  } catch (e) {
+    document.body.innerHTML = `<div class="flex flex-col items-center justify-center min-h-screen text-[var(--text-muted)] gap-3">
+      <p class="text-lg">📡 無法載入 usage_data.json</p>
+      <p class="text-sm">請先執行: <code class="bg-[var(--bg-card)] px-2 py-1 rounded">python fetch_usage.py --mock</code></p>
+      <p class="text-xs">錯誤: ${e.message}</p>
+    </div>`;
+    return;
+  }
+  renderAll();
+}
+
+init();
+</script>
+</body>
+</html>
