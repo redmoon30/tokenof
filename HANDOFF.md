@@ -1,6 +1,11 @@
 # Tokenof Handoff — 2026-08-10
 
 > **給 Claude Code**：請審查並修復以下問題。專案在 `D:\Coding\tokenof\`，GitHub: `redmoon30/tokenof`。
+>
+> ⚠️ **2026-08-10 已審查完畢 → 回覆與待辦順序見 [`HANDOFF-CC-2026-08-10.md`](HANDOFF-CC-2026-08-10.md)。**
+> 本文下方的「已知問題」清單反映的是 commit `24881c4`（資料嵌入）**之前**的狀態；
+> 該 commit 引入了一個更嚴重的結構性錯誤（資料 script 被巢狀進外層 script，整個 JS 解析失敗），
+> 在修好它之前，下方 #2 描述的圖表行為都觀察不到。**請以 CC 那份的優先序為準。**
 
 ---
 
