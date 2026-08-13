@@ -1,77 +1,85 @@
 # Tokenof — Token 用量儀表板
 
-簡單清晰的 Token 用量 Dashboard，取代各家官方難讀的圖表。目前實作 DeepSeek，
-多來源（Claude Code / Codex）規格見 [`MULTI-SOURCE.md`](MULTI-SOURCE.md)。
-
-> ⚠️ **目前狀態：dashboard 無法運作**（資料 script 被巢狀進外層 script，整段 JS 解析失敗）。
-> 問題清單與修復順序見 [`HANDOFF-CC-2026-08-10.md`](HANDOFF-CC-2026-08-10.md)。
+多來源 Token 用量儀表板（DeepSeek / Claude Code / Codex），取代各家官方難讀的用量圖表。
 
 ## 功能
 
-- 📊 年/月/日 三種檢視模式
-- 💰 本月 vs 上月花費對比
-- 📈 Token 用量趨勢（Cache Hit/Miss/Response）
+- 📊 年/月/日 三種檢視粒度
+- 💰 本月 vs 上月花費對比（MTD 對齊）
 - 🎯 Cache 命中率追蹤
-- 🤖 模型用量分布
+- 🤖 多來源模型分布（來源分色）
 - 💡 Token 優化洞察建議
+- 🔋 Codex 訂閱額度卡
+
+## 架構
+
+```
+tokenof/
+├── build.py                    # 主入口：呼叫 collectors → 合併 → 寫 JSON → 注入 HTML
+├── collectors/
+│   ├── deepseek.py             # 遠端 API（需 token）
+│   ├── claude_code.py          # 讀 ~/.claude/projects/*/*.jsonl（離線）
+│   └── codex.py                # 讀 ~/.codex/sessions/**/rollout-*.jsonl（離線）
+├── tokenof-dashboard.html      # 自包含 HTML Dashboard（資料由 build.py 注入）
+└── usage_data.json             # 輸出（已 gitignore，含真實用量不上傳）
+```
 
 ## 快速開始
 
-### 1. 取得 Platform Token
-
-1. 瀏覽器開啟 https://platform.deepseek.com 並登入
-2. 按 F12 打開 DevTools
-3. 進入 **Application** → **Cookies** → `platform.deepseek.com`
-4. 尋找名為 `__Host-plat-auth-token`（或類似名稱）的 Cookie
-5. 複製其 Value
-
-### 2. 設定環境變數
-
-在專案目錄建立 `.env` 檔：
-
-```
-DEEPSEEK_PLATFORM_TOKEN=你的_token_貼這裡
-```
-
-或設定系統環境變數：
-
-```powershell
-setx DEEPSEEK_PLATFORM_TOKEN "你的_token"
-```
-
-### 3. 擷取資料
+### 離線來源（不需 token）
 
 ```bash
-cd C:/Users/User/tokenof
-python fetch_usage.py
+python build.py --sources claude-code,codex --days 90
 ```
 
-### 4. 打開 Dashboard
+### DeepSeek（需 Platform Token）
+
+1. 瀏覽器登入 https://platform.deepseek.com
+2. `F12` → Application → Cookies → `platform.deepseek.com`
+3. 複製 auth token cookie 的 value
+4. 建立 `.env`：
+   ```
+   DEEPSEEK_PLATFORM_TOKEN=xxx
+   ```
+5. ```bash
+   python build.py --sources deepseek --days 90
+   ```
+
+### 全部來源
 
 ```bash
-start tokenof-dashboard.html
+python build.py --sources all --days 90
 ```
 
-或直接用瀏覽器打開 `tokenof-dashboard.html`。
-
-## 定時自動更新（選用）
-
-用 Hermes cron job 每小時自動更新：
+### 測試（DeepSeek 假資料）
 
 ```bash
-hermes cron create "0 * * * *" --prompt "cd C:/Users/User/tokenof && python fetch_usage.py" --name "tokenof-hourly-fetch"
+python build.py --sources all --mock
+```
+
+執行後用瀏覽器打開 `tokenof-dashboard.html`。
+
+## 定時更新（選用）
+
+```bash
+hermes cron create "0 * * * *" --prompt "cd D:/Coding/tokenof && python build.py --sources all" --name "tokenof-hourly"
 ```
 
 ## 檔案說明
 
 | 檔案 | 用途 |
 |---|---|
-| `fetch_usage.py` | 從 DeepSeek Platform API 擷取用量資料 |
-| `usage_data.json` | 快取的用量資料（自動產生） |
+| `build.py` | 主入口，合併來源 + 注入 HTML |
+| `collectors/deepseek.py` | DeepSeek 平台 API（需 token） |
+| `collectors/claude_code.py` | Claude Code 本機 jsonl |
+| `collectors/codex.py` | Codex 本機 jsonl |
 | `tokenof-dashboard.html` | 自包含 HTML Dashboard |
-| `.env` | Platform Token（不進版本控制） |
-| `HANDOFF-CC-2026-08-10.md` | Claude Code 審查回覆：問題清單與修復順序 |
-| `MULTI-SOURCE.md` | Claude Code / Codex 用量整合規格（未實作） |
+| `.env` | DeepSeek token（不進版本控制） |
+
+## 審查文件
+
+- `HANDOFF-CC-2026-08-10.md` — Claude Code 審查回覆（P0/P1/P2 問題清單）
+- `MULTI-SOURCE.md` — 多來源整合規格（schema v2、欄位對映、坑）
 
 ## 授權
 

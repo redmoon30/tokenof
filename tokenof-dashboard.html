@@ -3,37 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tokenof — DeepSeek 用量儀表板</title>
+<title>Tokenof — Token 用量儀表板</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
-tailwind.config = {
-  darkMode: 'class',
-  theme: { extend: {} }
-}
+tailwind.config = { darkMode: 'class', theme: { extend: {} } }
 </script>
 <style>
   :root {
-    --bg: #f8fafc;
-    --bg-card: #ffffff;
-    --border: #e2e8f0;
-    --text: #1e293b;
-    --text-muted: #64748b;
-    --text-sub: #94a3b8;
-    --accent: #3b82f6;
-    --accent2: #8b5cf6;
-    --danger: #ef4444;
-    --success: #22c55e;
-    --warning: #f59e0b;
-    --grid: rgba(0,0,0,0.04);
+    --bg: #f8fafc; --bg-card: #ffffff; --border: #e2e8f0;
+    --text: #1e293b; --text-muted: #64748b; --text-sub: #94a3b8;
+    --accent: #3b82f6; --accent2: #8b5cf6; --danger: #ef4444;
+    --success: #22c55e; --warning: #f59e0b; --grid: rgba(0,0,0,0.04);
   }
   .dark {
-    --bg: #0f172a;
-    --bg-card: #1e293b;
-    --border: #334155;
-    --text: #f1f5f9;
-    --text-muted: #94a3b8;
-    --text-sub: #64748b;
+    --bg: #0f172a; --bg-card: #1e293b; --border: #334155;
+    --text: #f1f5f9; --text-muted: #94a3b8; --text-sub: #64748b;
     --grid: rgba(255,255,255,0.04);
   }
   body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif; }
@@ -43,9 +28,9 @@ tailwind.config = {
   .btn { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-muted); cursor: pointer; font-size: 0.8rem; transition: all 0.15s; }
   .btn:hover { color: var(--text); border-color: var(--text-muted); }
   .btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .view-btn { padding: 5px 12px; border-radius: 6px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.78rem; font-weight: 500; transition: all 0.15s; }
-  .view-btn:hover { color: var(--text); }
-  .view-btn.active { background: var(--accent); color: #fff; }
+  .view-btn, .src-btn { padding: 5px 12px; border-radius: 6px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.78rem; font-weight: 500; transition: all 0.15s; }
+  .view-btn:hover, .src-btn:hover { color: var(--text); }
+  .view-btn.active, .src-btn.active { background: var(--accent); color: #fff; }
   .insight-good { border-left: 3px solid var(--success); }
   .insight-warn { border-left: 3px solid var(--warning); }
   .insight-bad { border-left: 3px solid var(--danger); }
@@ -57,12 +42,11 @@ tailwind.config = {
 </head>
 <body class="min-h-screen p-4 md:p-6">
 
-<!-- Header -->
 <div class="max-w-7xl mx-auto">
-  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+  <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
     <div>
       <h1 class="text-2xl font-bold tracking-tight">🔭 Tokenof</h1>
-      <p class="text-sm text-[var(--text-muted)] mt-0.5">DeepSeek Token 用量儀表板</p>
+      <p class="text-sm text-[var(--text-muted)] mt-0.5">Token 用量儀表板</p>
     </div>
     <div class="flex items-center gap-3 flex-wrap">
       <span id="fetchedAt" class="text-xs text-[var(--text-sub)]"></span>
@@ -75,6 +59,17 @@ tailwind.config = {
     </div>
   </div>
 
+  <!-- Source filter -->
+  <div class="flex gap-2 mb-4 flex-wrap" id="sourceFilter">
+    <button class="src-btn active" data-src="all" onclick="switchSource('all')">全部</button>
+    <button class="src-btn" data-src="deepseek" onclick="switchSource('deepseek')">DeepSeek</button>
+    <button class="src-btn" data-src="claude-code" onclick="switchSource('claude-code')">Claude Code</button>
+    <button class="src-btn" data-src="codex" onclick="switchSource('codex')">Codex</button>
+  </div>
+
+  <!-- Codex quota card -->
+  <div class="card mb-4" id="codexQuota" style="display:none"></div>
+
   <!-- Summary Cards -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="summaryCards"></div>
 
@@ -84,11 +79,11 @@ tailwind.config = {
   <!-- Charts Row 1 -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
     <div class="card">
-      <h3 class="text-sm font-semibold mb-3 text-[var(--text-muted)] uppercase tracking-wide" id="chart1Title">每月用量趨勢</h3>
+      <h3 class="text-sm font-semibold mb-3 text-[var(--text-muted)] uppercase tracking-wide" id="chart1Title">用量趨勢</h3>
       <div class="chart-container"><canvas id="chartMonthly"></canvas></div>
     </div>
     <div class="card">
-      <h3 class="text-sm font-semibold mb-3 text-[var(--text-muted)] uppercase tracking-wide" id="chart2Title">每日用量明細</h3>
+      <h3 class="text-sm font-semibold mb-3 text-[var(--text-muted)] uppercase tracking-wide" id="chart2Title">用量明細</h3>
       <div class="chart-container"><canvas id="chartDaily"></canvas></div>
     </div>
   </div>
@@ -121,14 +116,10 @@ tailwind.config = {
       <table class="w-full text-sm" id="modelTable">
         <thead>
           <tr class="text-left text-xs text-[var(--text-sub)] uppercase tracking-wide">
-            <th class="pb-2">模型</th>
-            <th class="pb-2 text-right">Cache Hit</th>
-            <th class="pb-2 text-right">Cache Miss</th>
-            <th class="pb-2 text-right">Response</th>
-            <th class="pb-2 text-right">總 Token</th>
-            <th class="pb-2 text-right">請求數</th>
-            <th class="pb-2 text-right">花費</th>
-            <th class="pb-2 text-right">命中率</th>
+            <th class="pb-2">來源</th><th class="pb-2">模型</th>
+            <th class="pb-2 text-right">Cache Hit</th><th class="pb-2 text-right">Cache Miss</th>
+            <th class="pb-2 text-right">Response</th><th class="pb-2 text-right">總 Token</th>
+            <th class="pb-2 text-right">請求數</th><th class="pb-2 text-right">花費</th><th class="pb-2 text-right">命中率</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -138,12 +129,13 @@ tailwind.config = {
 </div>
 
 <script>
-// ============================================================
-// STATE
-// ============================================================
 let rawData = null;
 let currentView = 'year';
+let currentSource = 'all';
 let charts = {};
+
+const SOURCE_LABEL = { 'deepseek': 'DeepSeek', 'claude-code': 'Claude Code', 'codex': 'Codex' };
+const SOURCE_COLOR = { 'deepseek': '#3b82f6', 'claude-code': '#8b5cf6', 'codex': '#22c55e' };
 
 // ============================================================
 // FORMAT
@@ -173,23 +165,24 @@ function updateChartThemes() {
   const tickColor = isDark ? '#94a3b8' : '#64748b';
   Object.values(charts).forEach(c => {
     if (c.options.scales?.x?.ticks) c.options.scales.x.ticks.color = tickColor;
-    if (c.options.scales?.y?.ticks) {
-      c.options.scales.y.ticks.color = tickColor;
-      c.options.scales.y.grid.color = gridColor;
-    }
+    if (c.options.scales?.y?.ticks) { c.options.scales.y.ticks.color = tickColor; c.options.scales.y.grid.color = gridColor; }
     if (c.options.plugins?.legend?.labels) c.options.plugins.legend.labels.color = tickColor;
     c.update();
   });
 }
 
 // ============================================================
-// DATA HELPERS
+// DATA HELPERS (schema v2: daily[] has `source`)
 // ============================================================
-function getDaysInView() {
-  const daily = rawData.daily;
+function getDaily() {
+  if (!rawData || !rawData.daily) return [];
+  if (currentSource === 'all') return rawData.daily;
+  return rawData.daily.filter(d => d.source === currentSource);
+}
+
+function getDaysInView(daily) {
   if (!daily.length) return [];
-  const now = new Date();
-  now.setHours(0,0,0,0);
+  const now = new Date(); now.setHours(0,0,0,0);
   if (currentView === 'year') {
     const cutoff = new Date(now); cutoff.setFullYear(cutoff.getFullYear() - 1);
     return daily.filter(d => new Date(d.date + 'T00:00:00') >= cutoff);
@@ -201,33 +194,43 @@ function getDaysInView() {
   }
 }
 
+function groupBy(days, key) {
+  const map = {};
+  days.forEach(d => {
+    const k = d[key];
+    if (!map[k]) map[k] = { hit: 0, miss: 0, resp: 0, tokens: 0, cost: 0, reqs: 0 };
+    map[k].hit += d.prompt_cache_hit || d.total_hit || 0;
+    map[k].miss += d.prompt_cache_miss || d.total_miss || 0;
+    map[k].resp += d.response || d.total_resp || 0;
+    map[k].tokens += d.total_tokens || 0;
+    map[k].reqs += d.request_count || 0;
+  });
+  // cost summed separately below
+  return map;
+}
+
+// For each daily record, compute per-record cost (metered CNY only)
+function recordCost(d) {
+  let c = 0;
+  if (d.models) {
+    Object.values(d.models).forEach(m => {
+      if (m.cost && m.cost_basis === 'metered') c += m.cost;
+    });
+  }
+  return c;
+}
+
 function getGroupedByMonth(days) {
   const map = {};
   days.forEach(d => {
     const m = d.date.substring(0, 7);
     if (!map[m]) map[m] = { tokens: 0, cost: 0, hit: 0, miss: 0, resp: 0, reqs: 0 };
     map[m].tokens += d.total_tokens;
-    map[m].cost += d.total_cost_cny;
-    map[m].hit += d.prompt_cache_hit;
-    map[m].miss += d.prompt_cache_miss;
-    map[m].resp += d.response;
-    map[m].reqs += d.request_count;
+    map[m].cost += recordCost(d);
+    map[m].hit += d.prompt_cache_hit; map[m].miss += d.prompt_cache_miss;
+    map[m].resp += d.response; map[m].reqs += d.request_count;
   });
   return Object.entries(map).map(([m, v]) => ({ month: m, ...v }));
-}
-
-function getGroupedByDay(days) {
-  return days.map(d => ({
-    date: d.date,
-    label: d.date.substring(5),
-    hit: d.prompt_cache_hit,
-    miss: d.prompt_cache_miss,
-    resp: d.response,
-    tokens: d.total_tokens,
-    cost: d.total_cost_cny,
-    cacheRate: d.cache_hit_rate,
-    reqs: d.request_count,
-  }));
 }
 
 function getGroupedByWeek(days) {
@@ -235,178 +238,166 @@ function getGroupedByWeek(days) {
   days.forEach(d => {
     const dt = new Date(d.date + 'T00:00:00');
     const day = dt.getDay();
-    const monday = new Date(dt);
-    monday.setDate(dt.getDate() - (day === 0 ? 6 : day - 1));
+    const monday = new Date(dt); monday.setDate(dt.getDate() - (day === 0 ? 6 : day - 1));
     const wk = monday.toISOString().substring(0, 10);
-    if (!map[wk]) map[wk] = { tokens: 0, cost: 0, hit: 0, miss: 0, resp: 0, reqs: 0, days: 0 };
-    map[wk].tokens += d.total_tokens;
-    map[wk].cost += d.total_cost_cny;
-    map[wk].hit += d.prompt_cache_hit;
-    map[wk].miss += d.prompt_cache_miss;
-    map[wk].resp += d.response;
-    map[wk].reqs += d.request_count;
-    map[wk].days++;
+    if (!map[wk]) map[wk] = { tokens: 0, cost: 0, hit: 0, miss: 0, resp: 0, reqs: 0 };
+    map[wk].tokens += d.total_tokens; map[wk].cost += recordCost(d);
+    map[wk].hit += d.prompt_cache_hit; map[wk].miss += d.prompt_cache_miss;
+    map[wk].resp += d.response; map[wk].reqs += d.request_count;
   });
   return Object.entries(map).map(([wk, v]) => ({ week: wk, ...v }));
+}
+
+function getGroupedByDay(days) {
+  return days.map(d => ({
+    date: d.date, label: d.date.substring(5),
+    hit: d.prompt_cache_hit, miss: d.prompt_cache_miss, resp: d.response,
+    tokens: d.total_tokens, cost: recordCost(d),
+    cacheRate: d.cache_hit_rate, reqs: d.request_count,
+  }));
 }
 
 function getModelAgg(days) {
   const map = {};
   days.forEach(d => {
-    Object.entries(d.models).forEach(([name, m]) => {
-      if (!map[name]) map[name] = { hit: 0, miss: 0, resp: 0, tokens: 0, cost: 0, reqs: 0 };
-      map[name].hit += m.prompt_cache_hit;
-      map[name].miss += m.prompt_cache_miss;
-      map[name].resp += m.response;
-      map[name].tokens += m.prompt_cache_hit + m.prompt_cache_miss + m.response;
-      map[name].cost += m.cost_cny;
-      map[name].reqs += m.request_count;
+    Object.entries(d.models || {}).forEach(([name, m]) => {
+      const key = d.source + '::' + name;
+      if (!map[key]) map[key] = { source: d.source, name, hit: 0, miss: 0, resp: 0, tokens: 0, cost: 0, reqs: 0 };
+      map[key].hit += m.prompt_cache_hit; map[key].miss += m.prompt_cache_miss;
+      map[key].resp += m.response; map[key].tokens += m.prompt_cache_hit + m.prompt_cache_miss + m.response;
+      map[key].cost += (m.cost && m.cost_basis === 'metered') ? m.cost : 0;
+      map[key].reqs += m.request_count;
     });
   });
-  return Object.entries(map).map(([name, v]) => ({ name, ...v }));
+  return Object.values(map);
 }
 
 function getSummary(days) {
   const totalTokens = days.reduce((s, d) => s + d.total_tokens, 0);
-  const totalCost = days.reduce((s, d) => s + d.total_cost_cny, 0);
+  const totalCost = days.reduce((s, d) => s + recordCost(d), 0);
   const totalHit = days.reduce((s, d) => s + d.prompt_cache_hit, 0);
   const totalMiss = days.reduce((s, d) => s + d.prompt_cache_miss, 0);
   const totalReqs = days.reduce((s, d) => s + d.request_count, 0);
   return {
     totalTokens, totalCost,
     cacheRate: (totalHit + totalMiss) > 0 ? totalHit / (totalHit + totalMiss) : 0,
-    totalReqs,
-    avgTokensPerReq: totalReqs > 0 ? Math.round(totalTokens / totalReqs) : 0,
+    totalReqs, avgTokensPerReq: totalReqs > 0 ? Math.round(totalTokens / totalReqs) : 0,
     totalHit, totalMiss,
   };
 }
 
-// View plan: {view: {leftGranularity, rightGranularity}}
 const VIEW_PLAN = {
   year:  { left: 'month', right: 'month', leftTitle: '每月用量趨勢 (近一年)', rightTitle: '每月用量明細 (近一年)' },
   month: { left: 'week',  right: 'day',   leftTitle: '每週用量趨勢 (近一月)', rightTitle: '每日用量明細 (近一月)' },
   day:   { left: 'day',   right: 'day',   leftTitle: '每日用量趨勢 (近31天)', rightTitle: '每日用量明細 (近31天)' },
 };
-
-function getSeries(days, granularity) {
-  if (granularity === 'month') return getGroupedByMonth(days);
-  if (granularity === 'week')  return getGroupedByWeek(days);
-  return getGroupedByDay(days);
-}
+function getSeries(days, g) { return g === 'month' ? getGroupedByMonth(days) : g === 'week' ? getGroupedByWeek(days) : getGroupedByDay(days); }
 
 // ============================================================
 // RENDER
 // ============================================================
 function renderAll() {
-  if (!rawData || !rawData.daily.length) {
-    document.body.innerHTML = '<div class="flex items-center justify-center min-h-screen text-[var(--text-muted)]">[INFO] 尚無資料 — 請先執行 fetch_usage.py</div>';
+  const daily = getDaily();
+  if (!rawData || !daily.length) {
+    document.body.innerHTML = '<div class="flex items-center justify-center min-h-screen text-[var(--text-muted)]">[INFO] 尚無資料 — 請先執行 build.py</div>';
     return;
   }
-  document.getElementById('fetchedAt').textContent = '更新: ' + (rawData.fetched_at || '');
-  if (rawData.is_mock) {
-    document.getElementById('fetchedAt').textContent += ' (MOCK)';
-  }
+  document.getElementById('fetchedAt').textContent = '更新: ' + (rawData.fetched_at || '') + (rawData.is_mock ? ' (MOCK)' : '');
 
+  renderCodexQuota();
   const plan = VIEW_PLAN[currentView];
-  const viewDays = getDaysInView();
+  const viewDays = getDaysInView(daily);
   const leftSeries = getSeries(viewDays, plan.left);
   const rightSeries = getSeries(viewDays, plan.right);
   const summary = getSummary(viewDays);
   const modelAgg = getModelAgg(viewDays);
-
-  // MoM: always from ALL data, not view-filtered
-  const allMonths = getGroupedByMonth(rawData.daily);
+  const allMonths = getGroupedByMonth(daily);
 
   document.getElementById('chart1Title').textContent = plan.leftTitle;
   document.getElementById('chart2Title').textContent = plan.rightTitle;
 
   renderSummaryCards(summary);
   renderMoMCards(allMonths);
-  renderMonthlyChart(leftSeries, plan.left);
-  renderDailyChart(rightSeries, plan.right);
+  renderTrendChart(leftSeries, plan.left);
+  renderBreakdownChart(rightSeries, plan.right);
   renderModelCharts(modelAgg);
-  renderCacheRateChart(viewDays);
-  renderInsights(summary, viewDays, modelAgg);
+  renderCacheRateChart(getGroupedByDay(viewDays));
+  renderInsights(summary, getGroupedByDay(viewDays), modelAgg);
   renderModelTable(modelAgg);
   updateChartThemes();
 }
 
-// ---- Summary Cards ----
+function renderCodexQuota() {
+  const el = document.getElementById('codexQuota');
+  const rl = rawData.codex_rate_limits;
+  if (!rl || !Object.keys(rl).length || (currentSource !== 'all' && currentSource !== 'codex')) {
+    el.style.display = 'none'; return;
+  }
+  el.style.display = 'block';
+  const used = rl.used_percent != null ? rl.used_percent.toFixed(1) : '—';
+  const resetDate = rl.resets_at ? new Date(rl.resets_at * 1000).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) : '—';
+  el.innerHTML = '<div class="flex items-center gap-4 flex-wrap"><div class="stat-label">Codex 額度 (Plus)</div><div class="stat-value" style="font-size:1.4rem;color:var(--accent2)">' + used + '%</div><div class="text-sm text-[var(--text-muted)]">已用額度 · 重置於 ' + resetDate + '</div></div>';
+}
+
 function renderSummaryCards(summary) {
+  const costLabel = currentSource === 'deepseek' || currentSource === 'all' ? '實際花費 (CNY)' : '花費';
   document.getElementById('summaryCards').innerHTML =
     '<div class="card"><div class="stat-label">總 Token</div><div class="stat-value">' + fmtUnit(summary.totalTokens) + '</div></div>' +
-    '<div class="card"><div class="stat-label">總花費</div><div class="stat-value" style="color:var(--danger)">' + fmtCny(summary.totalCost) + '</div></div>' +
+    '<div class="card"><div class="stat-label">' + costLabel + '</div><div class="stat-value" style="color:var(--danger)">' + fmtCny(summary.totalCost) + '</div><div class="text-xs text-[var(--text-sub)]">' + (currentSource === 'all' ? '僅 DeepSeek 實際計費' : '') + '</div></div>' +
     '<div class="card"><div class="stat-label">Cache 命中率</div><div class="stat-value" style="color:' + (summary.cacheRate >= 0.9 ? 'var(--success)' : summary.cacheRate >= 0.8 ? 'var(--warning)' : 'var(--danger)') + '">' + fmtPct(summary.cacheRate) + '</div></div>' +
     '<div class="card"><div class="stat-label">API 請求數</div><div class="stat-value">' + fmtInt(summary.totalReqs) + '</div><div class="text-xs text-[var(--text-sub)] mt-0.5">平均 ' + fmtInt(summary.avgTokensPerReq) + ' tokens/req</div></div>';
 }
 
-// ---- Month-over-Month (uses FULL data, MTD-aligned) ----
 function renderMoMCards(allMonths) {
   if (allMonths.length < 2) return;
   const thisMonth = allMonths[allMonths.length - 1];
   const lastMonth = allMonths[allMonths.length - 2];
+  const allDaily = getDaily();
+  const mtdDays = allDaily.filter(d => d.date.substring(0,7) === thisMonth.month).length;
+  const lastMtd = allDaily.filter(d => d.date.substring(0,7) === lastMonth.month).slice(0, mtdDays);
+  const thisMtd = allDaily.filter(d => d.date.substring(0,7) === thisMonth.month);
 
-  const mtdDays = rawData.daily.filter(d => d.date.substring(0,7) === thisMonth.month).length;
-  const lastMtd = rawData.daily.filter(d => d.date.substring(0,7) === lastMonth.month).slice(0, mtdDays);
-  const thisMtd = rawData.daily.filter(d => d.date.substring(0,7) === thisMonth.month);
+  const sum = (arr, k) => arr.reduce((s, d) => s + (k === 'cost' ? recordCost(d) : d[k]), 0);
+  const lastTk = sum(lastMtd, 'total_tokens'), thisTk = sum(thisMtd, 'total_tokens');
+  const lastCst = sum(lastMtd, 'cost'), thisCst = sum(thisMtd, 'cost');
+  const lastHit = sum(lastMtd, 'prompt_cache_hit'), thisHit = sum(thisMtd, 'prompt_cache_hit');
+  const lastMiss = sum(lastMtd, 'prompt_cache_miss'), thisMiss = sum(thisMtd, 'prompt_cache_miss');
+  const lastReq = sum(lastMtd, 'request_count'), thisReq = sum(thisMtd, 'request_count');
 
-  const lastMtdTokens = lastMtd.reduce((s,d) => s+d.total_tokens, 0);
-  const lastMtdCost = lastMtd.reduce((s,d) => s+d.total_cost_cny, 0);
-  const lastMtdHit = lastMtd.reduce((s,d) => s+d.prompt_cache_hit, 0);
-  const lastMtdMiss = lastMtd.reduce((s,d) => s+d.prompt_cache_miss, 0);
-  const lastMtdReqs = lastMtd.reduce((s,d) => s+d.request_count, 0);
-
-  const thisMtdTokens = thisMtd.reduce((s,d) => s+d.total_tokens, 0);
-  const thisMtdCost = thisMtd.reduce((s,d) => s+d.total_cost_cny, 0);
-  const thisMtdHit = thisMtd.reduce((s,d) => s+d.prompt_cache_hit, 0);
-  const thisMtdMiss = thisMtd.reduce((s,d) => s+d.prompt_cache_miss, 0);
-  const thisMtdReqs = thisMtd.reduce((s,d) => s+d.request_count, 0);
-
-  const tkChg = lastMtdTokens > 0 ? (thisMtdTokens - lastMtdTokens) / lastMtdTokens * 100 : 0;
-  const cstChg = lastMtdCost > 0 ? (thisMtdCost - lastMtdCost) / lastMtdCost * 100 : 0;
-  const lastHitRate = (lastMtdHit+lastMtdMiss) > 0 ? lastMtdHit/(lastMtdHit+lastMtdMiss) : 0;
-  const thisHitRate = (thisMtdHit+thisMtdMiss) > 0 ? thisMtdHit/(thisMtdHit+thisMtdMiss) : 0;
-  const hitChg = (thisHitRate - lastHitRate) * 100;
-  const reqChg = lastMtdReqs > 0 ? (thisMtdReqs - lastMtdReqs) / lastMtdReqs * 100 : 0;
+  const tkChg = lastTk > 0 ? (thisTk - lastTk) / lastTk * 100 : 0;
+  const cstChg = lastCst > 0 ? (thisCst - lastCst) / lastCst * 100 : 0;
+  const lastRate = (lastHit+lastMiss) > 0 ? lastHit/(lastHit+lastMiss) : 0;
+  const thisRate = (thisHit+thisMiss) > 0 ? thisHit/(thisHit+thisMiss) : 0;
+  const hitChg = (thisRate - lastRate) * 100;
+  const reqChg = lastReq > 0 ? (thisReq - lastReq) / lastReq * 100 : 0;
 
   const arrow = v => v > 1 ? '↑' : v < -1 ? '↓' : '→';
   const cls = v => v > 1 ? 'trend-up' : v < -1 ? 'trend-down' : 'trend-flat';
-  const hitCls = v => v > 1 ? 'trend-up' : v < -1 ? 'trend-down' : 'trend-flat'; // hit rate: up=good but we keep color=change direction; override via style
-
-  const rangeNote = '(' + (lastMtd[0]?.date||'') + ' ~ ' + (lastMtd[lastMtd.length-1]?.date||'') + ' vs ' + (thisMtd[0]?.date||'') + ' ~ ' + (thisMtd[thisMtd.length-1]?.date||'') + ')';
+  const note = '(' + (lastMtd[0]?.date||'') + '~' + (lastMtd[lastMtd.length-1]?.date||'') + ' vs ' + (thisMtd[0]?.date||'') + '~' + (thisMtd[thisMtd.length-1]?.date||'') + ')';
 
   document.getElementById('momCards').innerHTML =
-    '<div class="card"><div class="stat-label">Token 對比 (MTD)</div><div class="text-xs text-[var(--text-sub)]">'+rangeNote+'</div><div class="stat-value" style="font-size:1.1rem">'+fmtUnit(thisMtdTokens)+' <span class="'+cls(tkChg)+'" style="font-size:0.85rem">'+arrow(tkChg)+' '+Math.abs(tkChg).toFixed(1)+'%</span></div></div>' +
-    '<div class="card"><div class="stat-label">花費對比 (MTD)</div><div class="text-xs text-[var(--text-sub)]">'+rangeNote+'</div><div class="stat-value" style="font-size:1.1rem">'+fmtCny(thisMtdCost)+' <span class="'+cls(cstChg)+'" style="font-size:0.85rem">'+arrow(cstChg)+' '+Math.abs(cstChg).toFixed(1)+'%</span></div></div>' +
-    '<div class="card"><div class="stat-label">命中率對比</div><div class="text-xs text-[var(--text-sub)]">'+rangeNote+'</div><div class="stat-value" style="font-size:1.1rem;color:'+(hitChg>1?'var(--success)':hitChg<-1?'var(--danger)':'var(--text)')+'">'+fmtPct(thisHitRate)+' <span style="font-size:0.85rem;color:'+(hitChg>1?'var(--success)':hitChg<-1?'var(--danger)':'var(--text-muted)')+'">'+arrow(hitChg)+' '+Math.abs(hitChg).toFixed(1)+'pp</span></div></div>' +
-    '<div class="card"><div class="stat-label">請求數對比</div><div class="text-xs text-[var(--text-sub)]">'+rangeNote+'</div><div class="stat-value" style="font-size:1.1rem">'+fmtInt(thisMtdReqs)+' <span class="'+cls(reqChg)+'" style="font-size:0.85rem">'+arrow(reqChg)+' '+Math.abs(reqChg).toFixed(1)+'%</span></div></div>';
+    '<div class="card"><div class="stat-label">Token 對比 (MTD)</div><div class="text-xs text-[var(--text-sub)]">'+note+'</div><div class="stat-value" style="font-size:1.1rem">'+fmtUnit(thisTk)+' <span class="'+cls(tkChg)+'" style="font-size:0.85rem">'+arrow(tkChg)+' '+Math.abs(tkChg).toFixed(1)+'%</span></div></div>' +
+    '<div class="card"><div class="stat-label">花費對比 (MTD)</div><div class="text-xs text-[var(--text-sub)]">'+note+'</div><div class="stat-value" style="font-size:1.1rem">'+fmtCny(thisCst)+' <span class="'+cls(cstChg)+'" style="font-size:0.85rem">'+arrow(cstChg)+' '+Math.abs(cstChg).toFixed(1)+'%</span></div></div>' +
+    '<div class="card"><div class="stat-label">命中率對比</div><div class="text-xs text-[var(--text-sub)]">'+note+'</div><div class="stat-value" style="font-size:1.1rem;color:'+(hitChg>1?'var(--success)':hitChg<-1?'var(--danger)':'var(--text)')+'">'+fmtPct(thisRate)+' <span style="font-size:0.85rem;color:'+(hitChg>1?'var(--success)':hitChg<-1?'var(--danger)':'var(--text-muted)')+'">'+arrow(hitChg)+' '+Math.abs(hitChg).toFixed(1)+'pp</span></div></div>' +
+    '<div class="card"><div class="stat-label">請求數對比</div><div class="text-xs text-[var(--text-sub)]">'+note+'</div><div class="stat-value" style="font-size:1.1rem">'+fmtInt(thisReq)+' <span class="'+cls(reqChg)+'" style="font-size:0.85rem">'+arrow(reqChg)+' '+Math.abs(reqChg).toFixed(1)+'%</span></div></div>';
 }
 
-// ---- Left Chart (trend) ----
-function renderMonthlyChart(series, granularity) {
+function renderTrendChart(series, g) {
   if (charts.chartMonthly) charts.chartMonthly.destroy();
   const isDark = document.documentElement.classList.contains('dark');
-  const key = granularity === 'month' ? 'month' : granularity === 'week' ? 'week' : 'date';
+  const key = g === 'month' ? 'month' : g === 'week' ? 'week' : 'date';
   const labels = series.map(s => s[key]);
   const tokens = series.map(s => s.tokens);
   const changes = series.map((s, i) => i === 0 ? null : tokens[i-1] > 0 ? ((tokens[i] - tokens[i-1]) / tokens[i-1] * 100) : 0);
-
   charts.chartMonthly = new Chart(document.getElementById('chartMonthly'), {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Token 數', data: tokens, backgroundColor: isDark ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.3)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 4, yAxisID: 'y' },
-        { label: '增減率 %', data: changes, type: 'line', borderColor: '#f59e0b', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#f59e0b', yAxisID: 'y1', tension: 0.3 },
-      ],
-    },
+    data: { labels, datasets: [
+      { label: 'Token 數', data: tokens, backgroundColor: isDark ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.3)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 4, yAxisID: 'y' },
+      { label: '增減率 %', data: changes, type: 'line', borderColor: '#f59e0b', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#f59e0b', yAxisID: 'y1', tension: 0.3 },
+    ]},
     options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { labels: { color: isDark ? '#94a3b8' : '#64748b', boxWidth: 12, padding: 16 } },
-        tooltip: { callbacks: { label: ctx => ctx.dataset.label.includes('%') ? ctx.dataset.label + ': ' + (ctx.raw != null ? ctx.raw.toFixed(1)+'%' : '—') : ctx.dataset.label + ': ' + fmtUnit(ctx.raw) } },
-      },
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: isDark ? '#94a3b8' : '#64748b', boxWidth: 12, padding: 16 } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label.includes('%') ? ctx.dataset.label + ': ' + (ctx.raw != null ? ctx.raw.toFixed(1)+'%' : '—') : ctx.dataset.label + ': ' + fmtUnit(ctx.raw) } } },
       scales: {
         y:  { type: 'linear', position: 'left',  ticks: { color: isDark ? '#94a3b8' : '#64748b', callback: v => fmtUnit(v) }, grid: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } },
         y1: { type: 'linear', position: 'right', ticks: { color: '#f59e0b', callback: v => v.toFixed(0)+'%' }, grid: { drawOnChartArea: false } },
@@ -416,136 +407,84 @@ function renderMonthlyChart(series, granularity) {
   });
 }
 
-// ---- Right Chart (breakdown) ----
-function renderDailyChart(series, granularity) {
+function renderBreakdownChart(series, g) {
   if (charts.chartDaily) charts.chartDaily.destroy();
   const isDark = document.documentElement.classList.contains('dark');
-  const key = granularity === 'month' ? 'month' : granularity === 'week' ? 'week' : 'label';
+  const key = g === 'month' ? 'month' : g === 'week' ? 'week' : 'label';
   const labels = series.map(s => s[key]);
-  const isStacked = granularity !== 'month';
-
+  const stacked = g !== 'month';
   charts.chartDaily = new Chart(document.getElementById('chartDaily'), {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Cache Hit', data: series.map(d => d.hit),  backgroundColor: isDark ? 'rgba(34,197,94,0.5)' : 'rgba(34,197,94,0.4)', borderColor: '#22c55e', borderWidth: 0, borderRadius: 2 },
-        { label: 'Cache Miss', data: series.map(d => d.miss), backgroundColor: isDark ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.3)', borderColor: '#ef4444', borderWidth: 0, borderRadius: 2 },
-        { label: 'Response', data: series.map(d => d.resp),  backgroundColor: isDark ? 'rgba(139,92,246,0.4)' : 'rgba(139,92,246,0.3)', borderColor: '#8b5cf6', borderWidth: 0, borderRadius: 2 },
-      ],
-    },
+    data: { labels, datasets: [
+      { label: 'Cache Hit', data: series.map(d => d.hit),  backgroundColor: isDark ? 'rgba(34,197,94,0.5)' : 'rgba(34,197,94,0.4)', borderColor: '#22c55e', borderWidth: 0, borderRadius: 2 },
+      { label: 'Cache Miss', data: series.map(d => d.miss), backgroundColor: isDark ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.3)', borderColor: '#ef4444', borderWidth: 0, borderRadius: 2 },
+      { label: 'Response', data: series.map(d => d.resp),  backgroundColor: isDark ? 'rgba(139,92,246,0.4)' : 'rgba(139,92,246,0.3)', borderColor: '#8b5cf6', borderWidth: 0, borderRadius: 2 },
+    ]},
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: isDark ? '#94a3b8' : '#64748b', boxWidth: 12, padding: 16 } },
-        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmtUnit(ctx.raw), afterBody: items => { const d = series[items[0].dataIndex]; return ['花費: '+fmtCny(d.cost), '命中率: '+fmtPct(d.cacheRate||0)]; } } },
-      },
+      plugins: { legend: { labels: { color: isDark ? '#94a3b8' : '#64748b', boxWidth: 12, padding: 16 } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmtUnit(ctx.raw) } } },
       scales: {
-        x: { stacked: isStacked, ticks: { color: isDark ? '#94a3b8' : '#64748b', maxRotation: 45, autoSkip: true, maxTicksLimit: 20 } },
-        y: { stacked: isStacked, ticks: { color: isDark ? '#94a3b8' : '#64748b', callback: v => fmtUnit(v) }, grid: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } },
+        x: { stacked, ticks: { color: isDark ? '#94a3b8' : '#64748b', maxRotation: 45, autoSkip: true, maxTicksLimit: 20 } },
+        y: { stacked, ticks: { color: isDark ? '#94a3b8' : '#64748b', callback: v => fmtUnit(v) }, grid: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } },
       },
     },
   });
 }
 
-// ---- Model Charts ----
 function renderModelCharts(modelAgg) {
   const isDark = document.documentElement.classList.contains('dark');
-  const labels = modelAgg.map(m => m.name.replace('deepseek-', ''));
-  const colors = ['#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'];
-
+  const labels = modelAgg.map(m => m.source + '·' + m.name.replace(/^(deepseek-|claude-|gpt-)/, ''));
+  const colors = modelAgg.map(m => SOURCE_COLOR[m.source] || '#3b82f6');
   if (charts.chartModelTokens) charts.chartModelTokens.destroy();
   if (charts.chartModelCost) charts.chartModelCost.destroy();
-
-  const doughnutOpts = (title) => ({
-    responsive: true, maintainAspectRatio: true,
-    plugins: {
-      legend: { position: 'bottom', labels: { color: isDark ? '#94a3b8' : '#64748b', padding: 12, boxWidth: 10 } },
-      title: { display: true, text: title, color: isDark ? '#94a3b8' : '#64748b', font: { size: 12 } },
-    },
-  });
-
-  charts.chartModelTokens = new Chart(document.getElementById('chartModelTokens'), {
-    type: 'doughnut', data: { labels, datasets: [{ data: modelAgg.map(m => m.tokens), backgroundColor: colors.slice(0, modelAgg.length), borderWidth: 0 }] }, options: doughnutOpts('Token 占比')
-  });
-  charts.chartModelCost = new Chart(document.getElementById('chartModelCost'), {
-    type: 'doughnut', data: { labels, datasets: [{ data: modelAgg.map(m => m.cost), backgroundColor: colors.slice(0, modelAgg.length), borderWidth: 0 }] }, options: doughnutOpts('花費占比')
-  });
+  const opts = title => ({ responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom', labels: { color: isDark ? '#94a3b8' : '#64748b', padding: 12, boxWidth: 10 } }, title: { display: true, text: title, color: isDark ? '#94a3b8' : '#64748b', font: { size: 12 } } } });
+  charts.chartModelTokens = new Chart(document.getElementById('chartModelTokens'), { type: 'doughnut', data: { labels, datasets: [{ data: modelAgg.map(m => m.tokens), backgroundColor: colors, borderWidth: 0 }] }, options: opts('Token 占比') });
+  charts.chartModelCost = new Chart(document.getElementById('chartModelCost'), { type: 'doughnut', data: { labels, datasets: [{ data: modelAgg.map(m => m.cost), backgroundColor: colors, borderWidth: 0 }] }, options: opts('花費占比 (CNY)') });
 }
 
-// ---- Cache Rate Chart ----
 function renderCacheRateChart(daily) {
   if (charts.chartCacheRate) charts.chartCacheRate.destroy();
   const isDark = document.documentElement.classList.contains('dark');
   charts.chartCacheRate = new Chart(document.getElementById('chartCacheRate'), {
     type: 'line',
-    data: {
-      labels: daily.map(d => d.label || d.date),
-      datasets: [{ label: 'Cache 命中率', data: daily.map(d => d.cacheRate * 100), borderColor: '#22c55e', backgroundColor: isDark ? 'rgba(34,197,94,0.1)' : 'rgba(34,197,94,0.15)', fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2 }],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '命中率: ' + ctx.raw.toFixed(1) + '%' } } },
-      scales: {
-        y: { min: 0, max: 100, ticks: { color: isDark ? '#94a3b8' : '#64748b', callback: v => v + '%' }, grid: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } },
-        x: { ticks: { color: isDark ? '#94a3b8' : '#64748b', maxRotation: 45, autoSkip: true, maxTicksLimit: 20 } },
-      },
-    },
+    data: { labels: daily.map(d => d.label || d.date), datasets: [{ label: 'Cache 命中率', data: daily.map(d => d.cacheRate * 100), borderColor: '#22c55e', backgroundColor: isDark ? 'rgba(34,197,94,0.1)' : 'rgba(34,197,94,0.15)', fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '命中率: ' + ctx.raw.toFixed(1) + '%' } } }, scales: { y: { min: 0, max: 100, ticks: { color: isDark ? '#94a3b8' : '#64748b', callback: v => v + '%' }, grid: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } }, x: { ticks: { color: isDark ? '#94a3b8' : '#64748b', maxRotation: 45, autoSkip: true, maxTicksLimit: 20 } } } },
   });
 }
 
-// ---- Insights ----
 function renderInsights(summary, daily, modelAgg) {
   const insights = [];
-  // Cache hit rate
-  if (summary.cacheRate < 0.8) {
-    insights.push({ level: 'bad', text: 'Cache 命中率僅 ' + fmtPct(summary.cacheRate) + '，低於 80%。建議優化 system prompt 以提高 cache 命中，可節省 Cache Miss 費用。' });
-  } else if (summary.cacheRate < 0.9) {
-    insights.push({ level: 'warn', text: 'Cache 命中率 ' + fmtPct(summary.cacheRate) + '，接近理想值但仍有改善空間。檢查是否有頻繁變動的 system prompt。' });
-  } else {
-    insights.push({ level: 'good', text: 'Cache 命中率 ' + fmtPct(summary.cacheRate) + '，表現優異！Cache 機制有效節省了大量費用。' });
-  }
-
-  // Response ratio
-  const totalResp = summary.totalHit + summary.totalMiss > 0 ? daily.reduce((s, d) => s + d.resp, 0) / daily.reduce((s, d) => s + d.hit + d.miss, 0) : 0;
-  if (totalResp > 0.5) {
-    insights.push({ level: 'warn', text: 'Response/Input 比例偏高 (' + (totalResp*100).toFixed(0) + '%)，輸出 token 多。考慮限制 max_tokens 或優化 prompt 要求精簡回答。' });
-  }
-
-  // Spike detection
+  if (summary.cacheRate < 0.8) insights.push({ level: 'bad', text: 'Cache 命中率僅 ' + fmtPct(summary.cacheRate) + '，低於 80%。建議優化 system prompt 提高命中。' });
+  else if (summary.cacheRate < 0.9) insights.push({ level: 'warn', text: 'Cache 命中率 ' + fmtPct(summary.cacheRate) + '，接近理想但仍可改善。' });
+  else insights.push({ level: 'good', text: 'Cache 命中率 ' + fmtPct(summary.cacheRate) + '，表現優異！' });
+  if (summary.avgTokensPerReq > 10000) insights.push({ level: 'warn', text: '平均每次請求 ' + fmtInt(summary.avgTokensPerReq) + ' tokens，偏高。檢查 conversation history 或 system prompt 是否過大。' });
   if (daily.length >= 14) {
     const recent14 = daily.slice(-14);
     const avg = recent14.reduce((s, d) => s + d.tokens, 0) / recent14.length;
     const spikes = recent14.filter(d => d.tokens > avg * 2);
-    if (spikes.length > 0) {
-      insights.push({ level: 'bad', text: '偵測到 ' + spikes.length + ' 天用量暴增（>2x 平均）：' + spikes.map(d => d.date).join(', ') + '。建議排查是否有異常呼叫。' });
-    }
+    if (spikes.length > 0) insights.push({ level: 'bad', text: '偵測到 ' + spikes.length + ' 天用量暴增（>2x 平均）：' + spikes.map(d => d.date).join(', ') + '。' });
   }
-
-  // Avg tokens per request
-  if (summary.avgTokensPerReq > 10000) {
-    insights.push({ level: 'warn', text: '平均每次請求 ' + fmtInt(summary.avgTokensPerReq) + ' tokens，偏高。檢查是否有過長的 conversation history 或過大的 system prompt。' });
-  }
-
-  document.getElementById('insightsContainer').innerHTML = insights.map(i =>
-    '<div class="insight-' + i.level + ' bg-[var(--bg-card)] rounded-lg p-3 flex items-start gap-2"><span class="text-sm">' + (i.level === 'good' ? '✅' : i.level === 'warn' ? '⚠️' : '🔴') + '</span><span class="text-sm text-[var(--text)]">' + i.text + '</span></div>'
-  ).join('');
+  document.getElementById('insightsContainer').innerHTML = insights.map(i => '<div class="insight-' + i.level + ' bg-[var(--bg-card)] rounded-lg p-3 flex items-start gap-2"><span class="text-sm">' + (i.level === 'good' ? '✅' : i.level === 'warn' ? '⚠️' : '🔴') + '</span><span class="text-sm text-[var(--text)]">' + i.text + '</span></div>').join('');
 }
 
-// ---- Model Table ----
 function renderModelTable(modelAgg) {
-  const sorted = [...modelAgg].sort((a, b) => b.cost - a.cost);
+  const sorted = [...modelAgg].sort((a, b) => b.tokens - a.tokens);
   document.querySelector('#modelTable tbody').innerHTML = sorted.map(m => {
     const total = m.hit + m.miss + m.resp;
     const cacheRate = (m.hit + m.miss) > 0 ? m.hit / (m.hit + m.miss) : 0;
-    return '<tr class="border-t border-[var(--border)]"><td class="py-2 font-medium">' + m.name + '</td><td class="py-2 text-right">' + fmtUnit(m.hit) + '</td><td class="py-2 text-right">' + fmtUnit(m.miss) + '</td><td class="py-2 text-right">' + fmtUnit(m.resp) + '</td><td class="py-2 text-right font-semibold">' + fmtUnit(total) + '</td><td class="py-2 text-right">' + fmtInt(m.reqs) + '</td><td class="py-2 text-right" style="color:var(--danger)">' + fmtCny(m.cost) + '</td><td class="py-2 text-right">' + fmtPct(cacheRate) + '</td></tr>';
+    const costStr = m.cost > 0 ? fmtCny(m.cost) : '—';
+    return '<tr class="border-t border-[var(--border)]"><td class="py-2"><span style="color:' + (SOURCE_COLOR[m.source] || '#fff') + '">●</span> ' + (SOURCE_LABEL[m.source] || m.source) + '</td><td class="py-2 font-medium">' + m.name + '</td><td class="py-2 text-right">' + fmtUnit(m.hit) + '</td><td class="py-2 text-right">' + fmtUnit(m.miss) + '</td><td class="py-2 text-right">' + fmtUnit(m.resp) + '</td><td class="py-2 text-right font-semibold">' + fmtUnit(total) + '</td><td class="py-2 text-right">' + fmtInt(m.reqs) + '</td><td class="py-2 text-right" style="color:var(--danger)">' + costStr + '</td><td class="py-2 text-right">' + fmtPct(cacheRate) + '</td></tr>';
   }).join('');
 }
 
-// ---- View Switching ----
 function switchView(view) {
   currentView = view;
   document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  renderAll();
+}
+function switchSource(src) {
+  currentSource = src;
+  document.querySelectorAll('.src-btn').forEach(b => b.classList.toggle('active', b.dataset.src === src));
   renderAll();
 }
 
@@ -553,33 +492,21 @@ function switchView(view) {
 // INIT
 // ============================================================
 (function() {
-  // Restore theme preference
   const saved = localStorage.getItem('tokenof-theme');
   if (saved === 'light') document.documentElement.classList.remove('dark');
-  else if (!saved) {
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) document.documentElement.classList.remove('dark');
-  }
+  else if (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) document.documentElement.classList.remove('dark');
 
-  // 1) Try embedded data
   try {
     const el = document.getElementById('tokenof-data');
-    if (el && el.textContent.trim()) {
-      rawData = JSON.parse(el.textContent);
-      renderAll();
-      return;
-    }
+    if (el && el.textContent.trim()) { rawData = JSON.parse(el.textContent); renderAll(); return; }
   } catch (e) { console.warn('[WARN] embedded parse:', e); }
 
-  // 2) Fallback to fetch
   fetch('usage_data.json').then(r => { if (!r.ok) throw Error('HTTP '+r.status); return r.json(); })
   .then(d => { rawData = d; renderAll(); })
-  .catch(e => {
-    document.body.innerHTML = '<div class="flex flex-col items-center justify-center min-h-screen text-[var(--text-muted)] gap-3"><p class="text-lg">[INFO] 無法載入資料</p><p class="text-sm">請先執行: <code class="bg-[var(--bg-card)] px-2 py-1 rounded">python fetch_usage.py</code></p><p class="text-xs">然後重新打開這個頁面</p></div>';
-  });
+  .catch(() => { document.body.innerHTML = '<div class="flex flex-col items-center justify-center min-h-screen text-[var(--text-muted)] gap-3"><p class="text-lg">[INFO] 無法載入資料</p><p class="text-sm">請先執行: <code class="bg-[var(--bg-card)] px-2 py-1 rounded">python build.py</code></p></div>'; });
 })();
 </script>
 
-<!-- Data container: OUTSIDE the main script block (regex-replaced by fetch_usage.py) -->
-<script id="tokenof-data" type="application/json">{"fetched_at": "2026-08-10T07:27:14Z", "is_mock": true, "summary": {"monthly_cost_cny": 25.05}, "daily": [{"date": "2026-07-12", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 433462, "prompt_cache_miss": 27091, "response": 108365, "request_count": 162, "cost_cny": 0.2525}, "deepseek-v4-pro": {"prompt_cache_hit": 162548, "prompt_cache_miss": 16254, "response": 43346, "request_count": 54, "cost_cny": 0.3129}}, "total_tokens": 791066, "total_cost_cny": 0.5654, "cache_hit_rate": 0.9322, "request_count": 216, "prompt_cache_hit": 596010, "prompt_cache_miss": 43345, "response": 151711}, {"date": "2026-07-13", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 572005, "prompt_cache_miss": 35750, "response": 143001, "request_count": 214, "cost_cny": 0.3332}, "deepseek-v4-pro": {"prompt_cache_hit": 214501, "prompt_cache_miss": 21450, "response": 57200, "request_count": 71, "cost_cny": 0.4129}}, "total_tokens": 1043907, "total_cost_cny": 0.7461, "cache_hit_rate": 0.9322, "request_count": 286, "prompt_cache_hit": 786506, "prompt_cache_miss": 57200, "response": 200201}, {"date": "2026-07-14", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 692014, "prompt_cache_miss": 43250, "response": 173003, "request_count": 259, "cost_cny": 0.4031}, "deepseek-v4-pro": {"prompt_cache_hit": 259505, "prompt_cache_miss": 25950, "response": 69201, "request_count": 86, "cost_cny": 0.4995}}, "total_tokens": 1262923, "total_cost_cny": 0.9026, "cache_hit_rate": 0.9322, "request_count": 346, "prompt_cache_hit": 951519, "prompt_cache_miss": 69200, "response": 242204}, {"date": "2026-07-15", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 667141, "prompt_cache_miss": 41696, "response": 166785, "request_count": 250, "cost_cny": 0.3886}, "deepseek-v4-pro": {"prompt_cache_hit": 250177, "prompt_cache_miss": 25017, "response": 66714, "request_count": 83, "cost_cny": 0.4816}}, "total_tokens": 1217530, "total_cost_cny": 0.8702, "cache_hit_rate": 0.9322, "request_count": 333, "prompt_cache_hit": 917318, "prompt_cache_miss": 66713, "response": 233499}, {"date": "2026-07-16", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 913506, "prompt_cache_miss": 57094, "response": 228376, "request_count": 342, "cost_cny": 0.5321}, "deepseek-v4-pro": {"prompt_cache_hit": 342564, "prompt_cache_miss": 34256, "response": 91350, "request_count": 114, "cost_cny": 0.6594}}, "total_tokens": 1667146, "total_cost_cny": 1.1915, "cache_hit_rate": 0.9322, "request_count": 456, "prompt_cache_hit": 1256070, "prompt_cache_miss": 91350, "response": 319726}, {"date": "2026-07-17", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 884815, "prompt_cache_miss": 55300, "response": 221203, "request_count": 331, "cost_cny": 0.5154}, "deepseek-v4-pro": {"prompt_cache_hit": 331805, "prompt_cache_miss": 33180, "response": 88481, "request_count": 110, "cost_cny": 0.6387}}, "total_tokens": 1614784, "total_cost_cny": 1.1541, "cache_hit_rate": 0.9322, "request_count": 442, "prompt_cache_hit": 1216620, "prompt_cache_miss": 88480, "response": 309684}, {"date": "2026-07-18", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 494123, "prompt_cache_miss": 30882, "response": 123530, "request_count": 185, "cost_cny": 0.2878}, "deepseek-v4-pro": {"prompt_cache_hit": 185296, "prompt_cache_miss": 18529, "response": 49412, "request_count": 61, "cost_cny": 0.3567}}, "total_tokens": 901772, "total_cost_cny": 0.6445, "cache_hit_rate": 0.9322, "request_count": 247, "prompt_cache_hit": 679419, "prompt_cache_miss": 49411, "response": 172942}, {"date": "2026-07-19", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 300865, "prompt_cache_miss": 18804, "response": 75216, "request_count": 112, "cost_cny": 0.1753}, "deepseek-v4-pro": {"prompt_cache_hit": 112824, "prompt_cache_miss": 11282, "response": 30086, "request_count": 37, "cost_cny": 0.2172}}, "total_tokens": 549077, "total_cost_cny": 0.3925, "cache_hit_rate": 0.9322, "request_count": 150, "prompt_cache_hit": 413689, "prompt_cache_miss": 30086, "response": 105302}, {"date": "2026-07-20", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 762522, "prompt_cache_miss": 47657, "response": 190630, "request_count": 285, "cost_cny": 0.4442}, "deepseek-v4-pro": {"prompt_cache_hit": 285945, "prompt_cache_miss": 28594, "response": 76252, "request_count": 95, "cost_cny": 0.5504}}, "total_tokens": 1391600, "total_cost_cny": 0.9946, "cache_hit_rate": 0.9322, "request_count": 381, "prompt_cache_hit": 1048467, "prompt_cache_miss": 76251, "response": 266882}, {"date": "2026-07-21", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 574302, "prompt_cache_miss": 35893, "response": 143575, "request_count": 215, "cost_cny": 0.3345}, "deepseek-v4-pro": {"prompt_cache_hit": 215363, "prompt_cache_miss": 21536, "response": 57430, "request_count": 71, "cost_cny": 0.4146}}, "total_tokens": 1048099, "total_cost_cny": 0.7491, "cache_hit_rate": 0.9322, "request_count": 287, "prompt_cache_hit": 789665, "prompt_cache_miss": 57429, "response": 201005}, {"date": "2026-07-22", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 664946, "prompt_cache_miss": 41559, "response": 166236, "request_count": 249, "cost_cny": 0.3873}, "deepseek-v4-pro": {"prompt_cache_hit": 249354, "prompt_cache_miss": 24935, "response": 66494, "request_count": 83, "cost_cny": 0.48}}, "total_tokens": 1213524, "total_cost_cny": 0.8673, "cache_hit_rate": 0.9322, "request_count": 332, "prompt_cache_hit": 914300, "prompt_cache_miss": 66494, "response": 232730}, {"date": "2026-07-23", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 802570, "prompt_cache_miss": 50160, "response": 200642, "request_count": 300, "cost_cny": 0.4675}, "deepseek-v4-pro": {"prompt_cache_hit": 300963, "prompt_cache_miss": 30096, "response": 80257, "request_count": 100, "cost_cny": 0.5794}}, "total_tokens": 1464688, "total_cost_cny": 1.0469, "cache_hit_rate": 0.9322, "request_count": 401, "prompt_cache_hit": 1103533, "prompt_cache_miss": 80256, "response": 280899}, {"date": "2026-07-24", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 572737, "prompt_cache_miss": 35796, "response": 143184, "request_count": 214, "cost_cny": 0.3336}, "deepseek-v4-pro": {"prompt_cache_hit": 214776, "prompt_cache_miss": 21477, "response": 57273, "request_count": 71, "cost_cny": 0.4134}}, "total_tokens": 1045243, "total_cost_cny": 0.747, "cache_hit_rate": 0.9322, "request_count": 286, "prompt_cache_hit": 787513, "prompt_cache_miss": 57273, "response": 200457}, {"date": "2026-07-25", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 327721, "prompt_cache_miss": 20482, "response": 81930, "request_count": 122, "cost_cny": 0.1909}, "deepseek-v4-pro": {"prompt_cache_hit": 122895, "prompt_cache_miss": 12289, "response": 32772, "request_count": 40, "cost_cny": 0.2366}}, "total_tokens": 598089, "total_cost_cny": 0.4275, "cache_hit_rate": 0.9322, "request_count": 163, "prompt_cache_hit": 450616, "prompt_cache_miss": 32771, "response": 114702}, {"date": "2026-07-26", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 435972, "prompt_cache_miss": 27248, "response": 108993, "request_count": 163, "cost_cny": 0.254}, "deepseek-v4-pro": {"prompt_cache_hit": 163489, "prompt_cache_miss": 16348, "response": 43597, "request_count": 54, "cost_cny": 0.3147}}, "total_tokens": 795647, "total_cost_cny": 0.5687, "cache_hit_rate": 0.9322, "request_count": 217, "prompt_cache_hit": 599461, "prompt_cache_miss": 43596, "response": 152590}, {"date": "2026-07-27", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 821571, "prompt_cache_miss": 51348, "response": 205392, "request_count": 308, "cost_cny": 0.4786}, "deepseek-v4-pro": {"prompt_cache_hit": 308089, "prompt_cache_miss": 30808, "response": 82157, "request_count": 102, "cost_cny": 0.5931}}, "total_tokens": 1499365, "total_cost_cny": 1.0717, "cache_hit_rate": 0.9322, "request_count": 410, "prompt_cache_hit": 1129660, "prompt_cache_miss": 82156, "response": 287549}, {"date": "2026-07-28", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 665811, "prompt_cache_miss": 41613, "response": 166452, "request_count": 249, "cost_cny": 0.3878}, "deepseek-v4-pro": {"prompt_cache_hit": 249679, "prompt_cache_miss": 24967, "response": 66581, "request_count": 83, "cost_cny": 0.4806}}, "total_tokens": 1215103, "total_cost_cny": 0.8684, "cache_hit_rate": 0.9322, "request_count": 332, "prompt_cache_hit": 915490, "prompt_cache_miss": 66580, "response": 233033}, {"date": "2026-07-29", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 842847, "prompt_cache_miss": 52677, "response": 210711, "request_count": 316, "cost_cny": 0.491}, "deepseek-v4-pro": {"prompt_cache_hit": 316067, "prompt_cache_miss": 31606, "response": 84284, "request_count": 105, "cost_cny": 0.6084}}, "total_tokens": 1538192, "total_cost_cny": 1.0994, "cache_hit_rate": 0.9322, "request_count": 421, "prompt_cache_hit": 1158914, "prompt_cache_miss": 84283, "response": 294995}, {"date": "2026-07-30", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 948526, "prompt_cache_miss": 59282, "response": 237131, "request_count": 355, "cost_cny": 0.5525}, "deepseek-v4-pro": {"prompt_cache_hit": 355697, "prompt_cache_miss": 35569, "response": 94852, "request_count": 118, "cost_cny": 0.6847}}, "total_tokens": 1731057, "total_cost_cny": 1.2372, "cache_hit_rate": 0.9322, "request_count": 474, "prompt_cache_hit": 1304223, "prompt_cache_miss": 94851, "response": 331983}, {"date": "2026-07-31", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 563119, "prompt_cache_miss": 35194, "response": 140779, "request_count": 211, "cost_cny": 0.328}, "deepseek-v4-pro": {"prompt_cache_hit": 211169, "prompt_cache_miss": 21116, "response": 56311, "request_count": 70, "cost_cny": 0.4065}}, "total_tokens": 1027688, "total_cost_cny": 0.7345, "cache_hit_rate": 0.9322, "request_count": 281, "prompt_cache_hit": 774288, "prompt_cache_miss": 56310, "response": 197090}, {"date": "2026-08-01", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 473396, "prompt_cache_miss": 29587, "response": 118349, "request_count": 177, "cost_cny": 0.2758}, "deepseek-v4-pro": {"prompt_cache_hit": 177523, "prompt_cache_miss": 17752, "response": 47339, "request_count": 59, "cost_cny": 0.3417}}, "total_tokens": 863946, "total_cost_cny": 0.6175, "cache_hit_rate": 0.9322, "request_count": 236, "prompt_cache_hit": 650919, "prompt_cache_miss": 47339, "response": 165688}, {"date": "2026-08-02", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 447553, "prompt_cache_miss": 27972, "response": 111888, "request_count": 167, "cost_cny": 0.2607}, "deepseek-v4-pro": {"prompt_cache_hit": 167832, "prompt_cache_miss": 16783, "response": 44755, "request_count": 55, "cost_cny": 0.3231}}, "total_tokens": 816783, "total_cost_cny": 0.5838, "cache_hit_rate": 0.9322, "request_count": 223, "prompt_cache_hit": 615385, "prompt_cache_miss": 44755, "response": 156643}, {"date": "2026-08-03", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 723320, "prompt_cache_miss": 45207, "response": 180830, "request_count": 271, "cost_cny": 0.4213}, "deepseek-v4-pro": {"prompt_cache_hit": 271245, "prompt_cache_miss": 27124, "response": 72332, "request_count": 90, "cost_cny": 0.5221}}, "total_tokens": 1320058, "total_cost_cny": 0.9434, "cache_hit_rate": 0.9322, "request_count": 361, "prompt_cache_hit": 994565, "prompt_cache_miss": 72331, "response": 253162}, {"date": "2026-08-04", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 634630, "prompt_cache_miss": 39664, "response": 158657, "request_count": 237, "cost_cny": 0.3697}, "deepseek-v4-pro": {"prompt_cache_hit": 237986, "prompt_cache_miss": 23798, "response": 63463, "request_count": 79, "cost_cny": 0.4581}}, "total_tokens": 1158198, "total_cost_cny": 0.8278, "cache_hit_rate": 0.9322, "request_count": 317, "prompt_cache_hit": 872616, "prompt_cache_miss": 63462, "response": 222120}, {"date": "2026-08-05", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 1019462, "prompt_cache_miss": 63716, "response": 254865, "request_count": 382, "cost_cny": 0.5938}, "deepseek-v4-pro": {"prompt_cache_hit": 382298, "prompt_cache_miss": 38229, "response": 101946, "request_count": 127, "cost_cny": 0.7359}}, "total_tokens": 1860516, "total_cost_cny": 1.3297, "cache_hit_rate": 0.9322, "request_count": 509, "prompt_cache_hit": 1401760, "prompt_cache_miss": 101945, "response": 356811}, {"date": "2026-08-06", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 721565, "prompt_cache_miss": 45097, "response": 180391, "request_count": 270, "cost_cny": 0.4203}, "deepseek-v4-pro": {"prompt_cache_hit": 270587, "prompt_cache_miss": 27058, "response": 72156, "request_count": 90, "cost_cny": 0.5209}}, "total_tokens": 1316854, "total_cost_cny": 0.9412, "cache_hit_rate": 0.9322, "request_count": 360, "prompt_cache_hit": 992152, "prompt_cache_miss": 72155, "response": 252547}, {"date": "2026-08-07", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 604518, "prompt_cache_miss": 37782, "response": 151129, "request_count": 226, "cost_cny": 0.3521}, "deepseek-v4-pro": {"prompt_cache_hit": 226694, "prompt_cache_miss": 22669, "response": 60451, "request_count": 75, "cost_cny": 0.4364}}, "total_tokens": 1103243, "total_cost_cny": 0.7885, "cache_hit_rate": 0.9322, "request_count": 302, "prompt_cache_hit": 831212, "prompt_cache_miss": 60451, "response": 211580}, {"date": "2026-08-08", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 303211, "prompt_cache_miss": 18950, "response": 75802, "request_count": 113, "cost_cny": 0.1766}, "deepseek-v4-pro": {"prompt_cache_hit": 113704, "prompt_cache_miss": 11370, "response": 30321, "request_count": 37, "cost_cny": 0.2189}}, "total_tokens": 553358, "total_cost_cny": 0.3955, "cache_hit_rate": 0.9322, "request_count": 151, "prompt_cache_hit": 416915, "prompt_cache_miss": 30320, "response": 106123}, {"date": "2026-08-09", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 483398, "prompt_cache_miss": 30212, "response": 120849, "request_count": 181, "cost_cny": 0.2816}, "deepseek-v4-pro": {"prompt_cache_hit": 181274, "prompt_cache_miss": 18127, "response": 48339, "request_count": 60, "cost_cny": 0.3489}}, "total_tokens": 882199, "total_cost_cny": 0.6305, "cache_hit_rate": 0.9322, "request_count": 241, "prompt_cache_hit": 664672, "prompt_cache_miss": 48339, "response": 169188}, {"date": "2026-08-10", "models": {"deepseek-v4-flash": {"prompt_cache_hit": 849788, "prompt_cache_miss": 53111, "response": 212447, "request_count": 318, "cost_cny": 0.495}, "deepseek-v4-pro": {"prompt_cache_hit": 318670, "prompt_cache_miss": 31867, "response": 84978, "request_count": 106, "cost_cny": 0.6134}}, "total_tokens": 1550861, "total_cost_cny": 1.1084, "cache_hit_rate": 0.9322, "request_count": 424, "prompt_cache_hit": 1168458, "prompt_cache_miss": 84978, "response": 297425}]}</script>
+<script id="tokenof-data" type="application/json">{}</script>
 </body>
 </html>
