@@ -21,7 +21,7 @@ import json
 import os
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -53,8 +53,12 @@ def load_token() -> str:
     sys.exit(1)
 
 
-def api_get(url: str, token: str) -> dict:
+def api_get(url: str, token: str, params: dict = None) -> dict:
     """GET with auth autodetect: Bearer first, Cookie fallback on 401."""
+    if params:
+        qs = "&".join(f"{k}={v}" for k, v in params.items())
+        url = f"{url}?{qs}"
+
     def attempt(header_name):
         req = Request(url)
         req.add_header(header_name, f"Bearer {token}" if header_name == "Authorization" else token)
@@ -101,13 +105,18 @@ def normalize_amount(amount_data: dict) -> dict[str, dict]:
                 "hit": usage_map.get("PROMPT_CACHE_HIT_TOKEN", 0),
                 "miss": usage_map.get("PROMPT_CACHE_MISS_TOKEN", 0),
                 "resp": usage_map.get("RESPONSE_TOKEN", 0),
-                "reqs": model_entry.get("request_count", 0),
+                "reqs": usage_map.get("REQUEST", 0),
             }
     return result
 
 
 def normalize_cost(cost_data: dict) -> dict[str, dict[str, float]]:
-    """date -> model -> cost CNY"""
+    """date -> model -> cost CNY.
+
+    Cost API daily structure mirrors amount API: each model entry carries a
+    usage[] array where every type's `amount` IS the fee (decimal CNY), not a
+    token count. Sum all types per model per day.
+    """
     result: dict[str, dict[str, float]] = {}
     biz_list = cost_data.get("data", {}).get("biz_data", [])
     if not biz_list:
@@ -119,8 +128,9 @@ def normalize_cost(cost_data: dict) -> dict[str, dict[str, float]]:
         result[date] = {}
         for model_entry in day.get("data", []):
             model_name = model_entry.get("model", "unknown")
-            cost = model_entry.get("cost", 0)
-            result[date][model_name] = float(cost) if cost else 0.0
+            usage_list = model_entry.get("usage", [])
+            day_cost = sum(float(u.get("amount", 0) or 0) for u in usage_list)
+            result[date][model_name] = round(day_cost, 4)
     return result
 
 
@@ -133,20 +143,44 @@ def normalize_summary(summary_data: dict) -> dict:
 
 
 def collect(days: int = 90) -> list:
-    """Fetch and normalize into schema v2 daily records."""
+    """Fetch and normalize into schema v2 daily records.
+
+    DeepSeek usage API is per-month: ?year=YYYY&month=M (M 1-12, no zero-pad).
+    We loop over every month covered by the requested window and merge days.
+    """
+    from datetime import timedelta as _td
+
     token = load_token()
     print("[FETCH] DeepSeek usage (last %d days)" % days, file=sys.stderr)
 
-    amount_raw = api_get(ENDPOINTS["amount"], token)
-    cost_raw = api_get(ENDPOINTS["cost"], token)
-    summary_raw = api_get(ENDPOINTS["summary"], token)
+    today = datetime.now()
+    start = today - _td(days=days - 1)
+    today_str = today.strftime("%Y-%m-%d")
 
-    amount_map = normalize_amount(amount_raw)
-    cost_map = normalize_cost(cost_raw)
-    summary = normalize_summary(summary_raw)
+    months = []
+    y, m = start.year, start.month
+    while (y, m) <= (today.year, today.month):
+        months.append((y, m))
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
+    amount_map: dict = {}
+    cost_map: dict = {}
+    for y, m in months:
+        params = {"year": y, "month": m}
+        print(f"  -> amount {y}-{m:02d} ...", file=sys.stderr)
+        amount_map.update(normalize_amount(api_get(ENDPOINTS["amount"], token, params)))
+        print(f"  -> cost    {y}-{m:02d} ...", file=sys.stderr)
+        cost_map.update(normalize_cost(api_get(ENDPOINTS["cost"], token, params)))
+
+    summary = normalize_summary(api_get(ENDPOINTS["summary"], token))
 
     all_dates = sorted(set(amount_map.keys()) | set(cost_map.keys()))
-    recent = all_dates[-days:] if days > 0 else all_dates
+    recent = [d for d in all_dates if start.strftime("%Y-%m-%d") <= d <= today_str]
+    if days > 0 and len(recent) > days:
+        recent = recent[-days:]
 
     records = []
     for date in recent:
