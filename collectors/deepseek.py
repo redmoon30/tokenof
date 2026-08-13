@@ -197,12 +197,72 @@ def collect(days: int = 90) -> list:
     return records
 
 
+def mock(days: int = 90) -> list:
+    """Generate deterministic mock data (schema v2, source=deepseek) for testing."""
+    import random
+    from datetime import datetime, timedelta
+
+    random.seed(42)
+    today = datetime.now()
+    records = []
+
+    for i in range(days - 1, -1, -1):
+        date = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+        is_weekend = (today - timedelta(days=i)).weekday() >= 5
+        base = 0.5 if is_weekend else 1.0
+        jitter = random.uniform(0.7, 1.3)
+
+        models = {}
+        total_hit = total_miss = total_resp = total_reqs = 0
+        total_cost = 0.0
+
+        # flash: cheap high-volume model
+        f_hit = int(800_000 * base * jitter)
+        f_miss = int(50_000 * base * jitter)
+        f_resp = int(200_000 * base * jitter)
+        f_cost = round(f_hit / 1e6 * 0.02 + f_miss / 1e6 * 1 + f_resp / 1e6 * 2, 4)
+        models["deepseek-v4-flash"] = {
+            "prompt_cache_hit": f_hit, "prompt_cache_miss": f_miss, "response": f_resp,
+            "request_count": int(300 * base * jitter), "cost": f_cost,
+            "currency": "CNY", "cost_basis": "platform-billing",
+        }
+        # pro: expensive reasoning model
+        p_hit = int(300_000 * base * jitter)
+        p_miss = int(30_000 * base * jitter)
+        p_resp = int(80_000 * base * jitter)
+        p_cost = round(p_hit / 1e6 * 0.025 + p_miss / 1e6 * 3 + p_resp / 1e6 * 6, 4)
+        models["deepseek-v4-pro"] = {
+            "prompt_cache_hit": p_hit, "prompt_cache_miss": p_miss, "response": p_resp,
+            "request_count": int(100 * base * jitter), "cost": p_cost,
+            "currency": "CNY", "cost_basis": "platform-billing",
+        }
+
+        for m in models.values():
+            total_hit += m["prompt_cache_hit"]
+            total_miss += m["prompt_cache_miss"]
+            total_resp += m["response"]
+            total_reqs += m["request_count"]
+            total_cost += m["cost"]
+
+        records.append({
+            "date": date, "source": SOURCE, "models": models,
+            "total_tokens": total_hit + total_miss + total_resp,
+            "cache_hit_rate": round(total_hit / (total_hit + total_miss), 4) if (total_hit + total_miss) > 0 else 0.0,
+            "request_count": total_reqs,
+            "total_cost": round(total_cost, 4),
+        })
+
+    collect.summary = {"monthly_cost_cny": round(sum(r["total_cost"] for r in records[-30:]), 2)}
+    return records
+
+
 if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser(description="Tokenof DeepSeek collector")
     p.add_argument("--days", type=int, default=90)
+    p.add_argument("--mock", action="store_true", help="generate mock data")
     args = p.parse_args()
-    recs = collect(args.days)
+    recs = collect(args.days) if not args.mock else mock(args.days)
     if not recs:
         print("[INFO] no DeepSeek usage returned")
     else:
